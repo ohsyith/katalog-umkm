@@ -1,17 +1,20 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import TombolWhatsApp from "@/components/TombolWhatsApp";
-import CatatanBelumAktif from "@/components/CatatanBelumAktif";
-import { cariProdukContoh } from "@/lib/data-contoh";
 import { formatRupiah } from "@/lib/format";
+import { createServerClient } from "@/lib/supabase/server";
 
-// US-02: halaman ini masih memakai data contoh.
-// Tugas peserta: ambil satu produk dari Supabase berdasarkan id, di sisi server.
 export default async function HalamanDetailProduk({ params }) {
   const { id } = await params;
-  const produk = cariProdukContoh(id);
+  const supabase = createServerClient();
 
-  if (!produk) {
+  const { data: produk, error } = await supabase
+    .from("produk")
+    .select("*")
+    .eq("id", id)
+    .maybeSingle();
+
+  if (error || !produk) {
     notFound();
   }
 
@@ -23,17 +26,23 @@ export default async function HalamanDetailProduk({ params }) {
         className="aspect-square w-full rounded-2xl border border-garis bg-permukaan object-cover"
       />
       <div className="flex flex-col gap-4">
-        <Link href="/" className="text-sm text-teks-lembut underline underline-offset-4 hover:text-utama">
+        <Link
+          href="/"
+          className="text-sm text-teks-lembut underline underline-offset-4 hover:text-utama"
+        >
           Kembali ke katalog
         </Link>
         <p className="text-sm text-teks-lembut">{produk.kategori}</p>
-        <h1 className="text-3xl font-extrabold leading-tight tracking-tight">{produk.nama}</h1>
+        <h1 className="text-3xl font-extrabold leading-tight tracking-tight">
+          {produk.nama}
+        </h1>
         <p className="self-start rounded-md bg-harga-latar px-3 py-1 text-xl font-bold text-harga">
           {formatRupiah(produk.harga)}
         </p>
-        <p className="max-w-prose leading-relaxed text-teks-lembut">{produk.deskripsi}</p>
+        <p className="max-w-prose leading-relaxed text-teks-lembut">
+          {produk.deskripsi}
+        </p>
         <TombolWhatsApp produk={produk} />
-        <CatatanBelumAktif>Tombol pesan belum berfungsi: lihat US-03.</CatatanBelumAktif>
       </div>
     </article>
   );

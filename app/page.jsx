@@ -12,16 +12,22 @@ export default async function HalamanKatalog({ searchParams }) {
   const kategoriDipilih = params?.kategori?.trim() || "";
   const urut = params?.urut?.trim() || "";
 
-  // Helper untuk membangun URL dengan parameter yang saling terhubung (US-11 dan US-15)
-  function buildUrl({ newKat, newQ, newUrut }) {
+  const BATAS_PER_HALAMAN = 8;
+  const halamanInput = parseInt(params?.halaman, 10);
+  let halaman = isNaN(halamanInput) || halamanInput < 1 ? 1 : halamanInput;
+
+  // Helper untuk membangun URL dengan parameter yang saling terhubung (US-11, US-15, US-16)
+  function buildUrl({ newKat, newQ, newUrut, newHalaman }) {
     const p = new URLSearchParams();
     const k = newKat !== undefined ? newKat : kategoriDipilih;
     const queryText = newQ !== undefined ? newQ : q;
     const u = newUrut !== undefined ? newUrut : urut;
+    const h = newHalaman !== undefined ? newHalaman : halaman;
 
     if (k) p.set("kategori", k);
     if (queryText) p.set("q", queryText);
     if (u) p.set("urut", u);
+    if (h && h > 1) p.set("halaman", String(h));
 
     const s = p.toString();
     return s ? `/?${s}` : "/";
@@ -30,6 +36,7 @@ export default async function HalamanKatalog({ searchParams }) {
   let daftarProduk = null;
   let daftarKategori = [];
   let pesanError = null;
+  let totalHalaman = 1;
 
   try {
     const supabase = createServerClient();
@@ -45,8 +52,8 @@ export default async function HalamanKatalog({ searchParams }) {
       ).sort();
     }
 
-    // Query daftar produk sesuai filter kategori, pencarian, dan urutan di database (US-11 dan US-15)
-    let query = supabase.from("produk").select("*");
+    // Query daftar produk sesuai filter kategori, pencarian, dan urutan di database dengan range paginasi (US-16)
+    let query = supabase.from("produk").select("*", { count: "exact" });
 
     if (kategoriDipilih) {
       query = query.eq("kategori", kategoriDipilih);
@@ -67,7 +74,23 @@ export default async function HalamanKatalog({ searchParams }) {
       query = query.order("id", { ascending: true });
     }
 
-    const { data, error } = await query;
+    const dari = (halaman - 1) * BATAS_PER_HALAMAN;
+    const sampai = dari + BATAS_PER_HALAMAN - 1;
+
+    let { data, count, error } = await query.range(dari, sampai);
+
+    const totalProduk = count || 0;
+    totalHalaman = Math.ceil(totalProduk / BATAS_PER_HALAMAN) || 1;
+
+    // Jika halaman melebihi jumlah halaman, tampilkan halaman terakhir
+    if (halaman > totalHalaman && totalProduk > 0) {
+      halaman = totalHalaman;
+      const dariTerakhir = (halaman - 1) * BATAS_PER_HALAMAN;
+      const sampaiTerakhir = dariTerakhir + BATAS_PER_HALAMAN - 1;
+      const res = await query.range(dariTerakhir, sampaiTerakhir);
+      data = res.data;
+      error = res.error;
+    }
 
     if (error) {
       pesanError = `Gagal memuat produk: ${error.message}`;
@@ -108,7 +131,7 @@ export default async function HalamanKatalog({ searchParams }) {
               className="w-full rounded-lg border border-garis bg-latar px-3.5 py-2 text-sm text-teks placeholder:text-teks-lembut focus:border-utama focus:outline-none sm:w-64"
             />
             <Tombol type="submit">Cari</Tombol>
-            {(q || kategoriDipilih || urut) && (
+            {(q || kategoriDipilih || urut || halaman > 1) && (
               <Tombol href="/" varian="garis">
                 Reset
               </Tombol>
@@ -121,7 +144,7 @@ export default async function HalamanKatalog({ searchParams }) {
           <div className="flex flex-wrap items-center gap-2">
             <span className="text-xs font-semibold text-teks-lembut">Kategori:</span>
             <Link
-              href={buildUrl({ newKat: "" })}
+              href={buildUrl({ newKat: "", newHalaman: 1 })}
               className={`rounded-full px-3.5 py-1 text-xs font-semibold transition-colors ${
                 !kategoriDipilih
                   ? "bg-utama text-white"
@@ -136,7 +159,7 @@ export default async function HalamanKatalog({ searchParams }) {
               return (
                 <Link
                   key={kat}
-                  href={buildUrl({ newKat: kat })}
+                  href={buildUrl({ newKat: kat, newHalaman: 1 })}
                   className={`rounded-full px-3.5 py-1 text-xs font-semibold transition-colors ${
                     isActive
                       ? "bg-utama text-white"
@@ -154,7 +177,7 @@ export default async function HalamanKatalog({ searchParams }) {
         <div className="flex flex-wrap items-center gap-2">
           <span className="text-xs font-semibold text-teks-lembut">Urutan:</span>
           <Link
-            href={buildUrl({ newUrut: "termurah" })}
+            href={buildUrl({ newUrut: "termurah", newHalaman: 1 })}
             className={`rounded-full px-3.5 py-1 text-xs font-semibold transition-colors ${
               urut === "termurah"
                 ? "bg-utama text-white"
@@ -164,7 +187,7 @@ export default async function HalamanKatalog({ searchParams }) {
             Termurah
           </Link>
           <Link
-            href={buildUrl({ newUrut: "termahal" })}
+            href={buildUrl({ newUrut: "termahal", newHalaman: 1 })}
             className={`rounded-full px-3.5 py-1 text-xs font-semibold transition-colors ${
               urut === "termahal"
                 ? "bg-utama text-white"
@@ -174,7 +197,7 @@ export default async function HalamanKatalog({ searchParams }) {
             Termahal
           </Link>
           <Link
-            href={buildUrl({ newUrut: "terbaru" })}
+            href={buildUrl({ newUrut: "terbaru", newHalaman: 1 })}
             className={`rounded-full px-3.5 py-1 text-xs font-semibold transition-colors ${
               urut === "terbaru"
                 ? "bg-utama text-white"
@@ -190,11 +213,58 @@ export default async function HalamanKatalog({ searchParams }) {
             <p className="font-semibold">{pesanError}</p>
           </div>
         ) : daftarProduk && daftarProduk.length > 0 ? (
-          <div className="grid grid-cols-2 gap-4 md:grid-cols-3">
-            {daftarProduk.map((produk) => (
-              <KartuProduk key={produk.id} produk={produk} />
-            ))}
-          </div>
+          <>
+            <div className="grid grid-cols-2 gap-4 md:grid-cols-3">
+              {daftarProduk.map((produk) => (
+                <KartuProduk key={produk.id} produk={produk} />
+              ))}
+            </div>
+
+            {/* Navigasi Paginasi (US-16) */}
+            {totalHalaman > 1 && (
+              <div className="flex flex-wrap items-center justify-center gap-2 pt-6">
+                <Link
+                  href={buildUrl({ newHalaman: halaman - 1 })}
+                  className={`rounded-lg px-3.5 py-1.5 text-sm font-semibold transition-colors ${
+                    halaman <= 1
+                      ? "pointer-events-none opacity-40 border border-garis bg-latar text-teks-lembut"
+                      : "border border-garis bg-latar text-teks hover:border-utama hover:text-utama"
+                  }`}
+                  aria-disabled={halaman <= 1}
+                >
+                  Sebelumnya
+                </Link>
+
+                <div className="flex items-center gap-1">
+                  {Array.from({ length: totalHalaman }, (_, i) => i + 1).map((nomor) => (
+                    <Link
+                      key={nomor}
+                      href={buildUrl({ newHalaman: nomor })}
+                      className={`flex h-8 w-8 items-center justify-center rounded-lg text-sm font-semibold transition-colors ${
+                        nomor === halaman
+                          ? "bg-utama text-white"
+                          : "border border-garis bg-latar text-teks hover:border-utama hover:text-utama"
+                      }`}
+                    >
+                      {nomor}
+                    </Link>
+                  ))}
+                </div>
+
+                <Link
+                  href={buildUrl({ newHalaman: halaman + 1 })}
+                  className={`rounded-lg px-3.5 py-1.5 text-sm font-semibold transition-colors ${
+                    halaman >= totalHalaman
+                      ? "pointer-events-none opacity-40 border border-garis bg-latar text-teks-lembut"
+                      : "border border-garis bg-latar text-teks hover:border-utama hover:text-utama"
+                  }`}
+                  aria-disabled={halaman >= totalHalaman}
+                >
+                  Berikutnya
+                </Link>
+              </div>
+            )}
+          </>
         ) : (
           <p className="py-8 text-center text-teks-lembut">Belum ada produk</p>
         )}

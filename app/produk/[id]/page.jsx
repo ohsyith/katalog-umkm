@@ -1,8 +1,10 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import TombolWhatsApp from "@/components/TombolWhatsApp";
+import PilihanPesanan from "@/components/PilihanPesanan";
 import { formatRupiah } from "@/lib/format";
 import { createServerClient } from "@/lib/supabase/server";
+
+export const dynamic = "force-dynamic";
 
 export default async function HalamanDetailProduk({ params }) {
   const { id } = await params;
@@ -42,7 +44,7 @@ export default async function HalamanDetailProduk({ params }) {
         <p className="max-w-prose leading-relaxed text-teks-lembut">
           {produk.deskripsi}
         </p>
-        <TombolWhatsApp produk={produk} />
+        <PilihanPesanan produk={produk} />
       </div>
     </article>
   );

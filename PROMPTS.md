@@ -76,6 +76,55 @@ Di jendela penyamaran, membuka `localhost:3000/admin` langsung dialihkan ke hala
 
 **Perbaikan:**
 
+
+## US-07 List Produk [SENDIRI]
+
+**Prompt:**
+Baca AGENTS.md bagian aturan keamanan dan docs/user-stories.md bagian US-07.
+
+Ubah app/admin/page.jsx supaya daftar produk diambil dari tabel "produk" di Supabase, di sisi server, memakai koneksi Supabase server yang sudah dibuat di lib/supabase. Hapus data contoh yang masih tertulis di halaman dan tampilkan produk yang benar-benar ada di database. Kalau gagal mengambil data, tampilkan pesan error yang jelas di halaman. Kalau tabel kosong, tampilkan tulisan "Belum ada produk". Jangan ubah tampilan tabel/daftar produk yang sudah ada. Pastikan halaman tetap hanya bisa diakses setelah login.
+
+**Hasil:**
+Daftar produk di /admin sekarang diambil dari tabel "produk" di database, bukan data contoh. Setelah nama produk diubah di Supabase Table Editor dan halaman dimuat ulang, nama produk ikut berubah. Jika tabel kosong, muncul tulisan "Belum ada produk". Jika pengambilan data gagal, muncul pesan error yang jelas di halaman. Halaman tetap hanya bisa diakses setelah login.
+
+**Perbaikan:**
+
+## US-08 Tambah produk [SENDIRI]
+
+**Prompt:**
+Baca AGENTS.md bagian aturan keamanan dan docs/user-stories.md bagian US-08.
+
+Buat fitur tambah produk dari halaman admin. Form di app/admin/produk/baru/page.jsx harus menyimpan produk baru ke tabel "produk" di Supabase. Proses simpan dibuat sebagai Server Action di app/admin/actions.js. Sebelum menyimpan, Server Action wajib memeriksa sesi login di server; kalau tidak ada sesi, tolak dengan error yang jelas dan jangan menyimpan apa pun. Setelah berhasil menyimpan, arahkan (redirect) ke /admin. Kalau gagal, tampilkan pesan error yang jelas di halaman form. Jangan ubah tampilan form yang sudah ada selain menyambungkannya ke Server Action.
+
+**Hasil:**
+Mengisi form di /admin/produk/baru lalu menyimpan berhasil menambahkan produk baru ke tabel "produk" di database dan diarahkan ke /admin; produk baru langsung tampil di daftar. Jika penyimpanan gagal, muncul pesan error yang jelas di halaman form. Tanpa login, aksi simpan ditolak di server dan tidak ada data yang tersimpan.
+
+**Perbaikan:**
+
+## US-09 Ubah produk [SENDIRI]
+
+**Prompt:**
+Baca AGENTS.md bagian aturan keamanan dan docs/user-stories.md bagian US-09.
+
+Buat fitur ubah produk. Halaman app/admin/produk/[id]/ubah/page.jsx mengambil data produk lama dari tabel "produk" di Supabase berdasarkan id di URL (di sisi server) dan mengisi form dengan data tersebut. Kalau produk tidak ditemukan, panggil notFound(). Form disambungkan ke Server Action di app/admin/actions.js yang menyimpan perubahan ke tabel "produk". Server Action wajib memeriksa sesi login di server; kalau tidak ada sesi, tolak dengan error yang jelas dan jangan menyimpan. Setelah berhasil menyimpan, arahkan kembali ke /admin. Kalau gagal, tampilkan pesan error yang jelas. Jangan ubah tampilan form.
+
+**Hasil:**
+Membuka /admin/produk/[id]/ubah menampilkan form yang sudah terisi data produk lama dari database. Setelah perubahan disimpan, data di tabel "produk" ikut berubah dan halaman kembali ke /admin. Jika produk tidak ditemukan, muncul halaman "Halaman tidak ditemukan". Tanpa login, aksi simpan ditolak di server dan tidak ada perubahan yang tersimpan.
+
+**Perbaikan:**
+
+## US-10 Hapus produk [SENDIRI]
+
+**Prompt:**
+Baca AGENTS.md bagian aturan keamanan dan docs/user-stories.md bagian US-10.
+
+Buat fitur hapus produk di halaman /admin. Tambahkan tombol "Hapus" pada setiap baris produk yang meminta konfirmasi dulu (misalnya pakai window.confirm atau dialog konfirmasi) sebelum benar-benar menghapus. Proses hapus dibuat sebagai Server Action di app/admin/actions.js yang menghapus baris produk dari tabel "produk" di Supabase berdasarkan id. Server Action wajib memeriksa sesi login di server; kalau tidak ada sesi, tolak dengan error yang jelas dan jangan menghapus apa pun. Setelah berhasil, muat ulang daftar produk di /admin. Kalau gagal, tampilkan pesan error yang jelas. Jangan ubah tampilan tabel yang sudah ada selain menambahkan tombol Hapus dan dialog konfirmasi.
+
+**Hasil:**
+Klik tombol "Hapus" pada baris produk memunculkan dialog konfirmasi terlebih dahulu. Setelah dikonfirmasi, produk terhapus dari tabel "produk" di database dan hilang dari daftar di /admin. Jika penghapusan gagal, muncul pesan error yang jelas. Tanpa login, aksi hapus ditolak di server dan tidak ada data yang terhapus.
+
+**Perbaikan:**
+
 ## Debugging dan fitur bonus
 
 Tambahkan bagian baru untuk setiap error yang kamu perbaiki atau fitur bonus yang kamu kerjakan.

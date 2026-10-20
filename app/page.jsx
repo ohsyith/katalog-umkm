@@ -10,6 +10,22 @@ export default async function HalamanKatalog({ searchParams }) {
   const params = await searchParams;
   const q = params?.q?.trim() || "";
   const kategoriDipilih = params?.kategori?.trim() || "";
+  const urut = params?.urut?.trim() || "";
+
+  // Helper untuk membangun URL dengan parameter yang saling terhubung (US-11 dan US-15)
+  function buildUrl({ newKat, newQ, newUrut }) {
+    const p = new URLSearchParams();
+    const k = newKat !== undefined ? newKat : kategoriDipilih;
+    const queryText = newQ !== undefined ? newQ : q;
+    const u = newUrut !== undefined ? newUrut : urut;
+
+    if (k) p.set("kategori", k);
+    if (queryText) p.set("q", queryText);
+    if (u) p.set("urut", u);
+
+    const s = p.toString();
+    return s ? `/?${s}` : "/";
+  }
 
   let daftarProduk = null;
   let daftarKategori = [];
@@ -29,7 +45,7 @@ export default async function HalamanKatalog({ searchParams }) {
       ).sort();
     }
 
-    // Query daftar produk sesuai filter kategori dan pencarian nama
+    // Query daftar produk sesuai filter kategori, pencarian, dan urutan di database (US-11 dan US-15)
     let query = supabase.from("produk").select("*");
 
     if (kategoriDipilih) {
@@ -40,7 +56,18 @@ export default async function HalamanKatalog({ searchParams }) {
       query = query.ilike("nama", `%${q}%`);
     }
 
-    const { data, error } = await query.order("id", { ascending: true });
+    // Terapkan urutan pada query Supabase di sisi server
+    if (urut === "termurah") {
+      query = query.order("harga", { ascending: true });
+    } else if (urut === "termahal") {
+      query = query.order("harga", { ascending: false });
+    } else if (urut === "terbaru") {
+      query = query.order("created_at", { ascending: false });
+    } else {
+      query = query.order("id", { ascending: true });
+    }
+
+    const { data, error } = await query;
 
     if (error) {
       pesanError = `Gagal memuat produk: ${error.message}`;
@@ -67,11 +94,12 @@ export default async function HalamanKatalog({ searchParams }) {
             Produk kami
           </h2>
 
-          {/* Form Pencarian */}
+          {/* Form Pencarian (US-11) */}
           <form action="/" method="GET" className="flex items-center gap-2">
             {kategoriDipilih && (
               <input type="hidden" name="kategori" value={kategoriDipilih} />
             )}
+            {urut && <input type="hidden" name="urut" value={urut} />}
             <input
               type="text"
               name="q"
@@ -80,7 +108,7 @@ export default async function HalamanKatalog({ searchParams }) {
               className="w-full rounded-lg border border-garis bg-latar px-3.5 py-2 text-sm text-teks placeholder:text-teks-lembut focus:border-utama focus:outline-none sm:w-64"
             />
             <Tombol type="submit">Cari</Tombol>
-            {(q || kategoriDipilih) && (
+            {(q || kategoriDipilih || urut) && (
               <Tombol href="/" varian="garis">
                 Reset
               </Tombol>
@@ -88,12 +116,13 @@ export default async function HalamanKatalog({ searchParams }) {
           </form>
         </div>
 
-        {/* Filter Kategori */}
+        {/* Filter Kategori (US-11) */}
         {daftarKategori.length > 0 && (
           <div className="flex flex-wrap items-center gap-2">
+            <span className="text-xs font-semibold text-teks-lembut">Kategori:</span>
             <Link
-              href={q ? `/?q=${encodeURIComponent(q)}` : "/"}
-              className={`rounded-full px-4 py-1.5 text-sm font-semibold transition-colors ${
+              href={buildUrl({ newKat: "" })}
+              className={`rounded-full px-3.5 py-1 text-xs font-semibold transition-colors ${
                 !kategoriDipilih
                   ? "bg-utama text-white"
                   : "border border-garis bg-latar text-teks hover:border-utama hover:text-utama"
@@ -104,14 +133,11 @@ export default async function HalamanKatalog({ searchParams }) {
             {daftarKategori.map((kat) => {
               const isActive =
                 kategoriDipilih.toLowerCase() === kat.toLowerCase();
-              const url = `/?kategori=${encodeURIComponent(kat)}${
-                q ? `&q=${encodeURIComponent(q)}` : ""
-              }`;
               return (
                 <Link
                   key={kat}
-                  href={url}
-                  className={`rounded-full px-4 py-1.5 text-sm font-semibold transition-colors ${
+                  href={buildUrl({ newKat: kat })}
+                  className={`rounded-full px-3.5 py-1 text-xs font-semibold transition-colors ${
                     isActive
                       ? "bg-utama text-white"
                       : "border border-garis bg-latar text-teks hover:border-utama hover:text-utama"
@@ -123,6 +149,41 @@ export default async function HalamanKatalog({ searchParams }) {
             })}
           </div>
         )}
+
+        {/* Pilihan Urutan Produk (US-15) */}
+        <div className="flex flex-wrap items-center gap-2">
+          <span className="text-xs font-semibold text-teks-lembut">Urutan:</span>
+          <Link
+            href={buildUrl({ newUrut: "termurah" })}
+            className={`rounded-full px-3.5 py-1 text-xs font-semibold transition-colors ${
+              urut === "termurah"
+                ? "bg-utama text-white"
+                : "border border-garis bg-latar text-teks hover:border-utama hover:text-utama"
+            }`}
+          >
+            Termurah
+          </Link>
+          <Link
+            href={buildUrl({ newUrut: "termahal" })}
+            className={`rounded-full px-3.5 py-1 text-xs font-semibold transition-colors ${
+              urut === "termahal"
+                ? "bg-utama text-white"
+                : "border border-garis bg-latar text-teks hover:border-utama hover:text-utama"
+            }`}
+          >
+            Termahal
+          </Link>
+          <Link
+            href={buildUrl({ newUrut: "terbaru" })}
+            className={`rounded-full px-3.5 py-1 text-xs font-semibold transition-colors ${
+              urut === "terbaru"
+                ? "bg-utama text-white"
+                : "border border-garis bg-latar text-teks hover:border-utama hover:text-utama"
+            }`}
+          >
+            Terbaru
+          </Link>
+        </div>
 
         {pesanError ? (
           <div className="rounded-xl border border-garis bg-permukaan p-6 text-center text-bahaya">

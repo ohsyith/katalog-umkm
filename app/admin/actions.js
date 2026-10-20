@@ -261,3 +261,89 @@ export async function hapusProduk(idOrFormData) {
   revalidatePath(`/produk/${id}`);
   return { success: true };
 }
+
+/**
+ * Server Action untuk membuat deskripsi produk secara otomatis dengan Gemini API.
+ * Dipanggil dari form produk (US-14).
+ * Kunci API tersimpan aman di server melalui environment variable GEMINI_API_KEY.
+ *
+ * Catatan: Gemini 2.0 Flash sudah dimatikan per 1 Juni 2026.
+ * Model yang dipakai sekarang adalah gemini-3.8-flash.
+ */
+export async function buatDeskripsiAI(nama, kategori) {
+  try {
+    await requireAuth();
+  } catch {
+    return { error: "Akses ditolak: kamu harus login sebagai admin." };
+  }
+
+  const apiKey = process.env.GEMINI_API_KEY;
+  if (!apiKey) {
+    return {
+      error:
+        "GEMINI_API_KEY belum dikonfigurasi di environment variable (.env.local).",
+    };
+  }
+
+  if (!nama || !nama.trim()) {
+    return { error: "Nama produk wajib diisi sebelum membuat deskripsi." };
+  }
+
+  const prompt = `Buat deskripsi produk dalam bahasa Indonesia yang menarik, singkat (1-2 kalimat), dan cocok untuk katalog toko UMKM.\nNama produk: ${nama.trim()}\nKategori: ${kategori?.trim() || "Umum"}\nBerikan hanya teks deskripsi produk saja tanpa tanda petik, awalan, atau catatan tambahan.`;
+
+  try {
+    // Model utama: gemini-3.8-flash
+    let response = await fetch(
+      "https://generativelanguage.googleapis.com/v1beta/models/gemini-3.8-flash:generateContent",
+      {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "x-goog-api-key": apiKey,
+        },
+        body: JSON.stringify({
+          contents: [{ parts: [{ text: prompt }] }],
+        }),
+      }
+    );
+
+    // Fallback ke gemini-3.7-flash jika 3.8-flash mengembalikan 404
+    if (!response.ok && response.status === 404) {
+      response = await fetch(
+        "https://generativelanguage.googleapis.com/v1beta/models/gemini-3.7-flash:generateContent",
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "x-goog-api-key": apiKey,
+          },
+          body: JSON.stringify({
+            contents: [{ parts: [{ text: prompt }] }],
+          }),
+        }
+      );
+    }
+
+    if (!response.ok) {
+      const errJson = await response.json().catch(() => ({}));
+      const errMsg =
+        errJson?.error?.message ||
+        `Panggilan Gemini API gagal dengan status ${response.status}.`;
+      return { error: errMsg };
+    }
+
+    const data = await response.json();
+    const deskripsi =
+      data?.candidates?.[0]?.content?.parts?.[0]?.text?.trim();
+
+    if (!deskripsi) {
+      return { error: "Gemini tidak mengembalikan teks deskripsi." };
+    }
+
+    return { deskripsi };
+  } catch (err) {
+    return {
+      error: err.message || "Terjadi kesalahan saat memanggil Gemini API.",
+    };
+  }
+}

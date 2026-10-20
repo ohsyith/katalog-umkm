@@ -125,6 +125,45 @@ Klik tombol "Hapus" pada baris produk memunculkan dialog konfirmasi terlebih dah
 
 **Perbaikan:**
 
+
+
+## US-11 Filter kategori atau pencarian [SENDIRI]
+
+**Prompt:**
+Baca AGENTS.md dan docs/user-stories.md bagian US-11.
+
+Tambahkan fitur filter kategori dan pencarian nama produk pada halaman katalog app/page.jsx. Pengunjung bisa menyaring produk berdasarkan kategori dan/atau mencari nama produk, dan hasilnya harus sesuai. Gunakan searchParams (misalnya ?kategori=...&q=...) dan lakukan query ke tabel "produk" di Supabase di sisi server memakai koneksi Supabase server yang sudah ada di lib/supabase. Untuk pencarian nama produk gunakan filter ilike, dan untuk kategori gunakan kolom kategori yang ada di tabel produk. Ambil daftar kategori yang tersedia dari data produk di database. Tetap tampilkan hasil memakai komponen KartuProduk yang sudah ada tanpa mengubah tampilannya. Jika tidak ada hasil, tampilkan tulisan "Belum ada produk". Jika query gagal, tampilkan pesan error yang jelas. Jangan mengubah halaman detail produk maupun halaman admin.
+
+**Hasil:**
+Halaman katalog menampilkan pilihan kategori dan kolom pencarian. Memilih kategori menyaring produk sesuai kategori tersebut, dan mengetik nama produk menampilkan produk yang cocok. Kombinasi keduanya juga berjalan benar, dan jumlah kartu yang tampil sesuai dengan data di database. Jika tidak ada yang cocok, muncul tulisan "Belum ada produk". Jika query gagal, muncul pesan error yang jelas.
+
+**Perbaikan:**
+
+## US-12 Pilih jumlah atau varian [SENDIRI]
+
+**Prompt:**
+Baca docs/user-stories.md bagian US-12.
+
+Tambahkan pilihan jumlah dan/atau varian pada halaman detail produk app/produk/[id]/page.jsx sebelum pengunjung memesan. Jika tabel "produk" memiliki kolom varian, tampilkan pilihan varian dari data produk; jika tidak ada, cukup tampilkan pilihan jumlah. Simpan pilihan pengunjung di state client. Sambungkan pilihan tersebut ke components/TombolWhatsApp.jsx, lalu ubah TombolWhatsApp agar pesan WhatsApp otomatis memuat nama produk, harga dalam format rupiah, jumlah, dan varian (jika ada). Pesan tetap di-encode dengan encodeURIComponent, dibuka ke https://wa.me/ dengan nomor dari lib/toko.js, dan dibuka di tab baru. Pertahankan tampilan tombol dan halaman detail yang sudah ada. Jangan mengubah data produk di database dan jangan mengubah halaman admin.
+
+**Hasil:**
+Di halaman detail produk, pengunjung bisa memilih jumlah (dan varian jika tersedia) sebelum memesan. Pilihan tersebut ikut tertulis di pesan WhatsApp, misalnya "Halo, saya mau pesan Kopi Bubuk Robusta 250 g - 2 pcs (Rp 90.000)". Pesan terisi otomatis, di-encode dengan encodeURIComponent, dan terbuka di tab baru ke nomor toko. Tampilan tombol dan halaman detail tidak berubah.
+
+**Perbaikan:**
+
+## US-13 PWA [SENDIRI]
+
+**Prompt:**
+Baca docs/user-stories.md bagian US-13.
+
+Buat katalog menjadi PWA yang bisa di-install ke layar utama HP. Tambahkan web app manifest (misalnya public/manifest.webmanifest atau public/manifest.json) yang berisi name, short_name, start_url, display "standalone", theme_color, background_color, dan icons yang merujuk ke file ikon yang sudah tersedia di public/icons (minimal ukuran 192x192 dan 512x512; jika belum ada, gunakan file ikon yang tersedia di public/icons dan rujuk dengan benar). Tautkan manifest tersebut di app/layout.jsx melalui metadata/manifest agar muncul di halaman. Jika diperlukan agar bisa di-install, tambahkan service worker minimal di public/sw.js dan daftarkan dari komponen client tanpa mengubah tampilan halaman. Pastikan manifest dan ikon dapat diakses, lalu verifikasi katalog bisa di-install ke layar utama HP. Jangan mengubah tampilan katalog, halaman detail, maupun halaman admin.
+
+**Hasil:**
+Halaman katalog memiliki web app manifest yang tertaut dan dapat diakses, dengan ikon dari public/icons yang dirujuk di manifest. Katalog berhasil di-install ke layar utama HP dan terbuka dalam mode standalone. Tampilan katalog, halaman detail, dan halaman admin tidak berubah.
+
+**Perbaikan:**
+
+
 ## Debugging dan fitur bonus
 
 Tambahkan bagian baru untuk setiap error yang kamu perbaiki atau fitur bonus yang kamu kerjakan.

@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { toko } from "@/lib/toko";
 import TombolKeranjangNav from "@/components/TombolKeranjangNav";
+import TombolFavoritNav from "@/components/TombolFavoritNav";
 
 export default function Header() {
   return (
@@ -9,7 +10,10 @@ export default function Header() {
         <Link href="/" className="text-lg font-extrabold tracking-tight text-utama">
           {toko.nama}
         </Link>
-        <TombolKeranjangNav />
+        <div className="flex items-center gap-2.5">
+          <TombolFavoritNav />
+          <TombolKeranjangNav />
+        </div>
       </div>
     </header>
   );

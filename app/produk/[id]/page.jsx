@@ -3,6 +3,7 @@ import { notFound } from "next/navigation";
 import GaleriFoto from "@/components/GaleriFoto";
 import KartuProduk from "@/components/KartuProduk";
 import PilihanPesanan from "@/components/PilihanPesanan";
+import TombolFavorit from "@/components/TombolFavorit";
 import { formatRupiah } from "@/lib/format";
 import { createServerClient } from "@/lib/supabase/server";
 
@@ -55,9 +56,17 @@ export default async function HalamanDetailProduk({ params }) {
             Kembali ke katalog
           </Link>
           <p className="text-sm text-teks-lembut">{produk.kategori}</p>
-          <h1 className="text-3xl font-extrabold leading-tight tracking-tight">
-            {produk.nama}
-          </h1>
+          <div className="flex items-start justify-between gap-4">
+            <h1 className="text-3xl font-extrabold leading-tight tracking-tight">
+              {produk.nama}
+            </h1>
+            <TombolFavorit
+              id={produk.id}
+              nama={produk.nama}
+              ukuran="lg"
+              className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl border border-garis bg-permukaan hover:border-utama hover:bg-latar"
+            />
+          </div>
           <p className="self-start rounded-md bg-harga-latar px-3 py-1 text-xl font-bold text-harga">
             {formatRupiah(produk.harga)}
           </p>

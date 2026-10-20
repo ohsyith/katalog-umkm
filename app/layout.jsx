@@ -3,6 +3,7 @@ import Header from "@/components/Header";
 import Footer from "@/components/Footer";
 import PWARegister from "@/components/PWARegister";
 import { CartProvider } from "@/components/CartProvider";
+import { FavoritProvider } from "@/components/FavoritProvider";
 import { toko } from "@/lib/toko";
 
 export const metadata = {
@@ -37,9 +38,11 @@ export default function RootLayout({ children }) {
       <body className="flex min-h-screen flex-col font-sans antialiased">
         <PWARegister />
         <CartProvider>
-          <Header />
-          <main className="mx-auto w-full max-w-5xl flex-1 px-4">{children}</main>
-          <Footer />
+          <FavoritProvider>
+            <Header />
+            <main className="mx-auto w-full max-w-5xl flex-1 px-4">{children}</main>
+            <Footer />
+          </FavoritProvider>
         </CartProvider>
       </body>
     </html>

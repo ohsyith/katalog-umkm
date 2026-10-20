@@ -4,6 +4,7 @@ import Footer from "@/components/Footer";
 import PWARegister from "@/components/PWARegister";
 import { CartProvider } from "@/components/CartProvider";
 import { FavoritProvider } from "@/components/FavoritProvider";
+import { ThemeProvider } from "@/components/ThemeProvider";
 import { toko } from "@/lib/toko";
 
 export const metadata = {
@@ -26,8 +27,22 @@ export const viewport = {
 
 export default function RootLayout({ children }) {
   return (
-    <html lang="id">
+    <html lang="id" suppressHydrationWarning>
       <head>
+        <script
+          dangerouslySetInnerHTML={{
+            __html: `
+              try {
+                var t = localStorage.getItem('tema');
+                if (t === 'gelap' || (!t && window.matchMedia('(prefers-color-scheme: dark)').matches)) {
+                  document.documentElement.classList.add('dark');
+                } else {
+                  document.documentElement.classList.remove('dark');
+                }
+              } catch (e) {}
+            `,
+          }}
+        />
         <link rel="preconnect" href="https://fonts.googleapis.com" />
         <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="" />
         <link
@@ -37,13 +52,15 @@ export default function RootLayout({ children }) {
       </head>
       <body className="flex min-h-screen flex-col font-sans antialiased">
         <PWARegister />
-        <CartProvider>
-          <FavoritProvider>
-            <Header />
-            <main className="mx-auto w-full max-w-5xl flex-1 px-4">{children}</main>
-            <Footer />
-          </FavoritProvider>
-        </CartProvider>
+        <ThemeProvider>
+          <CartProvider>
+            <FavoritProvider>
+              <Header />
+              <main className="mx-auto w-full max-w-5xl flex-1 px-4">{children}</main>
+              <Footer />
+            </FavoritProvider>
+          </CartProvider>
+        </ThemeProvider>
       </body>
     </html>
   );

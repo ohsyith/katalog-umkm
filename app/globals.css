@@ -1,5 +1,7 @@
 @import "tailwindcss";
 
+@custom-variant dark (&:where(.dark, .dark *));
+
 /*
   Token desain. Ganti nilai di sini untuk menyesuaikan dengan usahamu.
   Penjelasan setiap token ada di DESIGN.md.
@@ -22,9 +24,33 @@
   --color-bahaya: #b42318;
 }
 
+/*
+  Palet warna mode gelap (US-25).
+  Mengubah variabel tema saat class "dark" aktif pada <html>.
+*/
+.dark {
+  --color-latar: #121815;
+  --color-permukaan: #1a231f;
+  --color-garis: #2b3932;
+  --color-teks: #eef5f1;
+  --color-teks-lembut: #9ab0a5;
+
+  --color-utama: #2ea378;
+  --color-utama-gelap: #238561;
+
+  --color-harga: #f6c870;
+  --color-harga-latar: #382508;
+
+  --color-bahaya: #f2685d;
+}
+
 html {
   color: var(--color-teks);
   background: var(--color-latar);
+}
+
+html.dark {
+  color-scheme: dark;
 }
 
 :focus-visible {

@@ -222,3 +222,42 @@ export async function ubahProduk(prevState, formData) {
   revalidatePath(`/produk/${id}`);
   redirect("/admin");
 }
+
+/**
+ * Server Action untuk menghapus baris produk dari tabel "produk" di Supabase berdasarkan id.
+ * Dipanggil dari tombol Hapus di components/TabelProduk.jsx.
+ */
+export async function hapusProduk(idOrFormData) {
+  const id =
+    idOrFormData instanceof FormData
+      ? idOrFormData.get("id")
+      : typeof idOrFormData === "object" && idOrFormData?.id
+        ? idOrFormData.id
+        : idOrFormData;
+
+  if (!id) {
+    return { error: "ID produk tidak valid." };
+  }
+
+  let supabase;
+  try {
+    const authResult = await requireAuth();
+    supabase = authResult.supabase;
+  } catch (err) {
+    return { error: "Akses ditolak: kamu harus login sebagai admin." };
+  }
+
+  const { error: deleteError } = await supabase
+    .from("produk")
+    .delete()
+    .eq("id", id);
+
+  if (deleteError) {
+    return { error: `Gagal menghapus produk: ${deleteError.message}` };
+  }
+
+  revalidatePath("/");
+  revalidatePath("/admin");
+  revalidatePath(`/produk/${id}`);
+  return { success: true };
+}

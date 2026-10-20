@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { useCart } from "@/components/CartProvider";
+import { apakahProdukHabis, ambilHargaEfektif } from "@/lib/format";
 
 export default function TambahKeKeranjangButton({
   produk,
@@ -14,10 +15,7 @@ export default function TambahKeKeranjangButton({
   const [sukses, setSukses] = useState(false);
 
   // Periksa apakah produk habis (US-19)
-  const isHabis =
-    (produk?.stok !== undefined && Number(produk.stok) <= 0) ||
-    produk?.status === "habis" ||
-    produk?.habis === true;
+  const isHabis = apakahProdukHabis(produk);
 
   const handleTambah = (e) => {
     e.preventDefault();
@@ -27,7 +25,7 @@ export default function TambahKeKeranjangButton({
     tambahKeKeranjang({
       id: produk.id,
       nama: produk.nama,
-      harga: Number(produk.harga_diskon || produk.harga),
+      harga: ambilHargaEfektif(produk),
       foto_url: produk.foto_url,
       jumlah: Number(jumlah) || 1,
       varian: varian || null,
@@ -77,4 +75,3 @@ export default function TambahKeKeranjangButton({
     </button>
   );
 }
-

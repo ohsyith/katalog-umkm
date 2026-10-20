@@ -150,6 +150,67 @@ function parseFotoTambahan(rawInput) {
 }
 
 /**
+ * Helper untuk membuat path unik yang aman di Supabase Storage (US-29).
+ * Mengganti karakter non-aman pada nama file dengan tanda hubung.
+ */
+function buatPathStorage(namaFile) {
+  const namaAman = namaFile
+    .replace(/[^a-zA-Z0-9._-]/g, "-")
+    .replace(/-{2,}/g, "-")
+    .toLowerCase();
+  const unik = `${Date.now()}-${crypto.randomUUID()}-${namaAman}`;
+  return unik;
+}
+
+/**
+ * Validasi MIME type dan ukuran file gambar (US-29).
+ * Tipe yang diizinkan: image/jpeg, image/png, image/webp, image/gif.
+ * Ukuran maksimal: 2 MB per file.
+ * Mengembalikan null jika valid, atau string pesan error jika tidak valid.
+ */
+function validasiFileFoto(file) {
+  const MIME_DIIZINKAN = ["image/jpeg", "image/png", "image/webp", "image/gif"];
+  const MAKS_UKURAN = 2 * 1024 * 1024; // 2 MB
+
+  if (!file || !(file instanceof File) || file.size === 0) {
+    return "File kosong tidak bisa diunggah.";
+  }
+  if (!MIME_DIIZINKAN.includes(file.type)) {
+    return `Foto "${file.name}" bukan gambar. File harus berupa gambar (JPG, PNG, WEBP, atau GIF).`;
+  }
+  if (file.size > MAKS_UKURAN) {
+    return `Foto "${file.name}" melebihi ukuran maksimal 2 MB.`;
+  }
+  return null;
+}
+
+/**
+ * Upload satu file ke Supabase Storage bucket "produk" menggunakan server client.
+ * Mengembalikan URL publik file, atau melempar error jika gagal.
+ */
+async function uploadFileFoto(supabase, file) {
+  const path = buatPathStorage(file.name);
+  const arrayBuffer = await file.arrayBuffer();
+  const buffer = Buffer.from(arrayBuffer);
+
+  const { error: uploadError } = await supabase.storage
+    .from("produk")
+    .upload(path, buffer, {
+      contentType: file.type,
+      upsert: false,
+    });
+
+  if (uploadError) {
+    throw new Error(
+      `Gagal mengunggah foto "${file.name}" ke Storage. Pastikan bucket 'produk' sudah dibuat dan dapat diakses. Detail: ${uploadError.message}`
+    );
+  }
+
+  const { data: pubData } = supabase.storage.from("produk").getPublicUrl(path);
+  return pubData.publicUrl;
+}
+
+/**
  * Server Action untuk menambah produk baru ke tabel "produk" di Supabase.
  * Dipanggil dari form di app/admin/produk/baru/page.jsx.
  */
@@ -159,21 +220,13 @@ export async function tambahProduk(prevState, formData) {
   const nama = data?.get("nama")?.toString()?.trim();
   const hargaRaw = data?.get("harga")?.toString()?.trim();
   const kategori = data?.get("kategori")?.toString()?.trim() || null;
-  const foto_url = data?.get("foto_url")?.toString()?.trim() || null;
-  const foto_tambahan = parseFotoTambahan(data?.get("foto_tambahan"));
+  let foto_url = data?.get("foto_url")?.toString()?.trim() || null;
+  const foto_tambahan_url = parseFotoTambahan(data?.get("foto_tambahan"));
   const deskripsi = data?.get("deskripsi")?.toString()?.trim() || null;
 
-  // Log sementara untuk memastikan data terkirim (US-18)
-  console.log("foto_tambahan mentah:", data?.get("foto_tambahan"));
-  console.log("foto_tambahan parsed:", foto_tambahan);
-  console.log("payload insert/update:", {
-    nama,
-    harga: hargaRaw ? parseInt(hargaRaw, 10) : NaN,
-    kategori,
-    foto_url,
-    foto_tambahan,
-    deskripsi,
-  });
+  // Ambil file yang diunggah (US-29)
+  const fotoFile = data?.get("foto_file");
+  const fotoTambahanFiles = data?.getAll("foto_tambahan_files") ?? [];
 
   if (!nama) {
     return { error: "Nama produk wajib diisi." };
@@ -184,6 +237,7 @@ export async function tambahProduk(prevState, formData) {
     return { error: "Harga produk harus berupa angka dan tidak boleh negatif." };
   }
 
+  // requireAuth terlebih dahulu (wajib sebelum upload)
   let supabase;
   try {
     const authResult = await requireAuth();
@@ -192,41 +246,56 @@ export async function tambahProduk(prevState, formData) {
     return { error: "Akses ditolak: kamu harus login sebagai admin." };
   }
 
-  let { data: insertedData, error: insertError } = await supabase
+  // Selalu gunakan createServerClient untuk operasi Storage (service role)
+  const serverClient = createServerClient();
+
+  // Validasi dan upload foto utama
+  if (fotoFile instanceof File && fotoFile.size > 0) {
+    const errValidasi = validasiFileFoto(fotoFile);
+    if (errValidasi) return { error: errValidasi };
+
+    try {
+      foto_url = await uploadFileFoto(serverClient, fotoFile);
+    } catch (err) {
+      return { error: err.message };
+    }
+  }
+
+  // Validasi dan upload foto tambahan
+  const fotoTambahanUpload = [];
+  const validFiles = fotoTambahanFiles.filter(
+    (f) => f instanceof File && f.size > 0
+  );
+
+  for (const file of validFiles) {
+    const errValidasi = validasiFileFoto(file);
+    if (errValidasi) return { error: errValidasi };
+
+    try {
+      const url = await uploadFileFoto(serverClient, file);
+      fotoTambahanUpload.push(url);
+    } catch (err) {
+      return { error: err.message };
+    }
+  }
+
+  // Gabungkan URL dari textarea dengan URL dari file upload (tanpa duplikasi)
+  const semuaFotoTambahan = [
+    ...fotoTambahanUpload,
+    ...foto_tambahan_url.filter((u) => !fotoTambahanUpload.includes(u)),
+  ];
+
+  const { data: insertedData, error: insertError } = await serverClient
     .from("produk")
     .insert({
       nama,
       harga,
       kategori,
       foto_url,
-      foto_tambahan,
+      foto_tambahan: semuaFotoTambahan,
       deskripsi,
     })
     .select();
-
-  // Fallback ke server client jika session client mengalami kendala RLS pada kolom baru
-  if (insertError) {
-    console.warn("Session insert mengalami kendala, mencoba serverClient:", insertError.message);
-    const serverClient = createServerClient();
-    const res = await serverClient
-      .from("produk")
-      .insert({
-        nama,
-        harga,
-        kategori,
-        foto_url,
-        foto_tambahan,
-        deskripsi,
-      })
-      .select();
-
-    if (!res.error) {
-      insertedData = res.data;
-      insertError = null;
-    } else {
-      insertError = res.error;
-    }
-  }
 
   if (insertError) {
     console.error("Gagal insert produk:", insertError);
@@ -252,22 +321,13 @@ export async function ubahProduk(prevState, formData) {
   const nama = data?.get("nama")?.toString()?.trim();
   const hargaRaw = data?.get("harga")?.toString()?.trim();
   const kategori = data?.get("kategori")?.toString()?.trim() || null;
-  const foto_url = data?.get("foto_url")?.toString()?.trim() || null;
-  const foto_tambahan = parseFotoTambahan(data?.get("foto_tambahan"));
+  let foto_url = data?.get("foto_url")?.toString()?.trim() || null;
+  const foto_tambahan_url = parseFotoTambahan(data?.get("foto_tambahan"));
   const deskripsi = data?.get("deskripsi")?.toString()?.trim() || null;
 
-  // Log sementara untuk memastikan data terkirim (US-18)
-  console.log("foto_tambahan mentah:", data?.get("foto_tambahan"));
-  console.log("foto_tambahan parsed:", foto_tambahan);
-  console.log("payload insert/update:", {
-    id,
-    nama,
-    harga: hargaRaw ? parseInt(hargaRaw, 10) : NaN,
-    kategori,
-    foto_url,
-    foto_tambahan,
-    deskripsi,
-  });
+  // Ambil file yang diunggah (US-29)
+  const fotoFile = data?.get("foto_file");
+  const fotoTambahanFiles = data?.getAll("foto_tambahan_files") ?? [];
 
   if (!id) {
     return { error: "ID produk tidak valid." };
@@ -282,51 +342,64 @@ export async function ubahProduk(prevState, formData) {
     return { error: "Harga produk harus berupa angka dan tidak boleh negatif." };
   }
 
-  let supabase;
+  // requireAuth terlebih dahulu (wajib sebelum upload)
   try {
-    const authResult = await requireAuth();
-    supabase = authResult.supabase;
+    await requireAuth();
   } catch (err) {
     return { error: "Akses ditolak: kamu harus login sebagai admin." };
   }
 
-  let { data: updatedData, error: updateError } = await supabase
+  // Selalu gunakan createServerClient untuk operasi Storage (service role)
+  const serverClient = createServerClient();
+
+  // Validasi dan upload foto utama (jika dipilih, timpa foto_url lama)
+  if (fotoFile instanceof File && fotoFile.size > 0) {
+    const errValidasi = validasiFileFoto(fotoFile);
+    if (errValidasi) return { error: errValidasi };
+
+    try {
+      foto_url = await uploadFileFoto(serverClient, fotoFile);
+    } catch (err) {
+      return { error: err.message };
+    }
+  }
+
+  // Validasi dan upload foto tambahan
+  const fotoTambahanUpload = [];
+  const validFiles = fotoTambahanFiles.filter(
+    (f) => f instanceof File && f.size > 0
+  );
+
+  for (const file of validFiles) {
+    const errValidasi = validasiFileFoto(file);
+    if (errValidasi) return { error: errValidasi };
+
+    try {
+      const url = await uploadFileFoto(serverClient, file);
+      fotoTambahanUpload.push(url);
+    } catch (err) {
+      return { error: err.message };
+    }
+  }
+
+  // Gabungkan URL dari textarea dengan URL dari file upload (tanpa duplikasi)
+  const semuaFotoTambahan = [
+    ...fotoTambahanUpload,
+    ...foto_tambahan_url.filter((u) => !fotoTambahanUpload.includes(u)),
+  ];
+
+  const { data: updatedData, error: updateError } = await serverClient
     .from("produk")
     .update({
       nama,
       harga,
       kategori,
       foto_url,
-      foto_tambahan,
+      foto_tambahan: semuaFotoTambahan,
       deskripsi,
     })
     .eq("id", id)
     .select();
-
-  // Fallback ke server client jika session client mengalami kendala RLS pada kolom baru
-  if (updateError || !updatedData || updatedData.length === 0) {
-    console.warn("Session update mengalami kendala, mencoba serverClient:", updateError?.message);
-    const serverClient = createServerClient();
-    const res = await serverClient
-      .from("produk")
-      .update({
-        nama,
-        harga,
-        kategori,
-        foto_url,
-        foto_tambahan,
-        deskripsi,
-      })
-      .eq("id", id)
-      .select();
-
-    if (!res.error && res.data?.length > 0) {
-      updatedData = res.data;
-      updateError = null;
-    } else if (res.error) {
-      updateError = res.error;
-    }
-  }
 
   if (updateError) {
     console.error("Gagal update produk:", updateError);

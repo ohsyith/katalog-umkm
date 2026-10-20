@@ -51,7 +51,7 @@ export default function FormProduk({
   };
 
   return (
-    <form action={formAction} className="flex max-w-xl flex-col gap-4">
+    <form action={formAction} encType="multipart/form-data" className="flex max-w-xl flex-col gap-4">
       {errorMessage && (
         <p className="rounded-lg border border-garis bg-permukaan p-3 text-sm text-bahaya">
           {errorMessage}
@@ -68,30 +68,60 @@ export default function FormProduk({
         required
       />
       <Input label="Kategori" name="kategori" defaultValue={produk.kategori} />
-      <Input
-        label="Link foto"
-        name="foto_url"
-        placeholder="https://... atau /produk/nama-file.svg"
-        defaultValue={produk.foto_url}
-      />
-      <div className="flex flex-col gap-1.5 text-sm font-semibold">
-        <label htmlFor="foto_tambahan">
-          Foto Tambahan (satu URL per baris, opsional)
+
+      {/* Foto utama: input file (prioritas) + URL manual sebagai opsi (US-29) */}
+      <div className="flex flex-col gap-2">
+        <label className="flex flex-col gap-1.5 text-sm font-semibold">
+          Unggah foto utama (opsional)
+          <input
+            type="file"
+            name="foto_file"
+            accept="image/jpeg,image/png,image/webp,image/gif"
+            className="rounded-lg border border-garis bg-latar px-3 py-2 text-sm text-teks file:mr-3 file:rounded-md file:border-0 file:bg-permukaan file:px-3 file:py-1 file:text-xs file:font-semibold file:text-teks hover:file:bg-garis"
+          />
         </label>
-        <textarea
-          id="foto_tambahan"
-          name="foto_tambahan"
-          rows={3}
-          placeholder={"https://example.com/foto1.jpg\n/produk/keripik.svg"}
-          defaultValue={
-            Array.isArray(produk.foto_tambahan)
-              ? (produk.foto_tambahan || []).join("\n")
-              : typeof produk.foto_tambahan === "string"
-              ? produk.foto_tambahan
-              : ""
-          }
-          className="w-full rounded-lg border border-garis bg-latar px-3 py-2.5 text-base font-normal text-teks placeholder:text-teks-lembut focus:border-utama focus:outline-none"
+        <p className="text-xs font-normal text-teks-lembut">
+          Atau isi URL manual di bawah. Jika keduanya diisi, file yang diunggah akan diprioritaskan.
+        </p>
+        <Input
+          label="Link foto (URL manual)"
+          name="foto_url"
+          placeholder="https://... atau /produk/nama-file.svg"
+          defaultValue={produk.foto_url}
         />
+      </div>
+
+      {/* Foto tambahan: input file multiple + URL manual (US-18 + US-29) */}
+      <div className="flex flex-col gap-2">
+        <label className="flex flex-col gap-1.5 text-sm font-semibold">
+          Unggah foto tambahan (opsional, bisa lebih dari satu)
+          <input
+            type="file"
+            name="foto_tambahan_files"
+            accept="image/jpeg,image/png,image/webp,image/gif"
+            multiple
+            className="rounded-lg border border-garis bg-latar px-3 py-2 text-sm text-teks file:mr-3 file:rounded-md file:border-0 file:bg-permukaan file:px-3 file:py-1 file:text-xs file:font-semibold file:text-teks hover:file:bg-garis"
+          />
+        </label>
+        <div className="flex flex-col gap-1.5 text-sm font-semibold">
+          <label htmlFor="foto_tambahan">
+            Atau URL foto tambahan (satu per baris)
+          </label>
+          <textarea
+            id="foto_tambahan"
+            name="foto_tambahan"
+            rows={3}
+            placeholder={"https://example.com/foto1.jpg\n/produk/keripik.svg"}
+            defaultValue={
+              Array.isArray(produk.foto_tambahan)
+                ? (produk.foto_tambahan || []).join("\n")
+                : typeof produk.foto_tambahan === "string"
+                ? produk.foto_tambahan
+                : ""
+            }
+            className="w-full rounded-lg border border-garis bg-latar px-3 py-2.5 text-base font-normal text-teks placeholder:text-teks-lembut focus:border-utama focus:outline-none"
+          />
+        </div>
       </div>
 
       {/* Kolom Deskripsi dengan tombol Buat deskripsi dengan AI (US-14) */}

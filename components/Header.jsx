@@ -11,10 +11,18 @@ export default function Header() {
         <Link href="/" className="text-lg font-extrabold tracking-tight text-utama">
           {toko.nama}
         </Link>
-        <div className="flex items-center gap-2 sm:gap-2.5">
-          <TombolTema />
-          <TombolFavoritNav />
-          <TombolKeranjangNav />
+        <div className="flex items-center gap-3 sm:gap-4">
+          <Link
+            href="/tentang"
+            className="text-sm font-medium text-teks-lembut transition-colors hover:text-utama"
+          >
+            Tentang
+          </Link>
+          <div className="flex items-center gap-2 sm:gap-2.5">
+            <TombolTema />
+            <TombolFavoritNav />
+            <TombolKeranjangNav />
+          </div>
         </div>
       </div>
     </header>

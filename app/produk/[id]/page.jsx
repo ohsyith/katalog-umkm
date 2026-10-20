@@ -4,7 +4,12 @@ import GaleriFoto from "@/components/GaleriFoto";
 import KartuProduk from "@/components/KartuProduk";
 import PilihanPesanan from "@/components/PilihanPesanan";
 import TombolFavorit from "@/components/TombolFavorit";
-import { formatRupiah } from "@/lib/format";
+import TombolBagikan from "@/components/TombolBagikan";
+import {
+  formatRupiah,
+  apakahProdukHabis,
+  apakahAdaDiskon,
+} from "@/lib/format";
 import { createServerClient } from "@/lib/supabase/server";
 
 export const dynamic = "force-dynamic";
@@ -22,6 +27,9 @@ export default async function HalamanDetailProduk({ params }) {
   if (error || !produk) {
     notFound();
   }
+
+  const isHabis = apakahProdukHabis(produk);
+  const adaDiskon = apakahAdaDiskon(produk);
 
   // Ambil produk terkait dari kategori yang sama, mengecualikan produk yang sedang dibuka (US-17)
   let produkTerkait = [];
@@ -55,24 +63,61 @@ export default async function HalamanDetailProduk({ params }) {
           >
             Kembali ke katalog
           </Link>
-          <p className="text-sm text-teks-lembut">{produk.kategori}</p>
+
+          <div className="flex flex-wrap items-center gap-2">
+            <p className="text-sm text-teks-lembut">{produk.kategori}</p>
+            {/* Status stok (US-19) atau badge seperti Baru / Terlaris (US-20) */}
+            {isHabis ? (
+              <span className="rounded-full bg-bahaya px-2.5 py-0.5 text-xs font-bold text-white shadow-sm">
+                Habis
+              </span>
+            ) : produk.badge ? (
+              <span className="rounded-full bg-utama px-2.5 py-0.5 text-xs font-bold text-white shadow-sm">
+                {produk.badge}
+              </span>
+            ) : null}
+          </div>
+
           <div className="flex items-start justify-between gap-4">
             <h1 className="text-3xl font-extrabold leading-tight tracking-tight">
               {produk.nama}
             </h1>
-            <TombolFavorit
-              id={produk.id}
-              nama={produk.nama}
-              ukuran="lg"
-              className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl border border-garis bg-permukaan hover:border-utama hover:bg-latar"
-            />
+            <div className="flex shrink-0 items-center gap-2">
+              <TombolBagikan
+                nama={produk.nama}
+                deskripsi={produk.deskripsi}
+              />
+              <TombolFavorit
+                id={produk.id}
+                nama={produk.nama}
+                ukuran="lg"
+                className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-garis bg-permukaan hover:border-utama hover:bg-latar"
+              />
+            </div>
           </div>
-          <p className="self-start rounded-md bg-harga-latar px-3 py-1 text-xl font-bold text-harga">
-            {formatRupiah(produk.harga)}
-          </p>
+
+          {/* Harga normal atau harga diskon (US-20) */}
+          <div className="flex flex-wrap items-center gap-2.5">
+            {adaDiskon ? (
+              <>
+                <p className="self-start rounded-md bg-harga-latar px-3 py-1 text-2xl font-bold text-harga">
+                  {formatRupiah(produk.harga_diskon)}
+                </p>
+                <span className="text-base text-teks-lembut line-through">
+                  {formatRupiah(produk.harga)}
+                </span>
+              </>
+            ) : (
+              <p className="self-start rounded-md bg-harga-latar px-3 py-1 text-2xl font-bold text-harga">
+                {formatRupiah(produk.harga)}
+              </p>
+            )}
+          </div>
+
           <p className="max-w-prose leading-relaxed text-teks-lembut">
             {produk.deskripsi}
           </p>
+
           <PilihanPesanan produk={produk} />
         </div>
       </article>

@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import TombolWhatsApp from "@/components/TombolWhatsApp";
+import TambahKeKeranjangButton from "@/components/TambahKeKeranjangButton";
 
 export default function PilihanPesanan({ produk }) {
   const [jumlah, setJumlah] = useState(1);
@@ -84,7 +85,15 @@ export default function PilihanPesanan({ produk }) {
         </div>
       </div>
 
-      <TombolWhatsApp produk={produk} jumlah={jumlah} varian={varian} />
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
+        <TambahKeKeranjangButton
+          produk={produk}
+          jumlah={jumlah}
+          varian={varian}
+          varianTampilan="standar"
+        />
+        <TombolWhatsApp produk={produk} jumlah={jumlah} varian={varian} />
+      </div>
     </div>
   );
 }

@@ -9,6 +9,7 @@ import {
   formatRupiah,
   apakahProdukHabis,
   apakahAdaDiskon,
+  apakahProdukAktif,
 } from "@/lib/format";
 import { toko } from "@/lib/toko";
 import { createServerClient } from "@/lib/supabase/server";
@@ -25,7 +26,7 @@ export async function generateMetadata({ params }) {
     .eq("id", id)
     .maybeSingle();
 
-  if (!produk) {
+  if (!produk || !apakahProdukAktif(produk)) {
     return {
       title: "Produk Tidak Ditemukan",
     };
@@ -67,7 +68,7 @@ export default async function HalamanDetailProduk({ params }) {
     .eq("id", id)
     .maybeSingle();
 
-  if (error || !produk) {
+  if (error || !produk || !apakahProdukAktif(produk)) {
     notFound();
   }
 

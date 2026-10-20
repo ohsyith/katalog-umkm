@@ -5,10 +5,9 @@ import Input from "@/components/Input";
 import Tombol from "@/components/Tombol";
 import { buatDeskripsiAI } from "@/app/admin/actions";
 
-// Dipakai untuk tambah produk (US-08) dan ubah produk (US-09). Keduanya bonus di jalur offline.
-// Nama field sama dengan kolom tabel "produk".
 export default function FormProduk({
   produk = {},
+  daftarKategori = [],
   labelTombol,
   action,
   error: customError,
@@ -17,9 +16,26 @@ export default function FormProduk({
     action || (() => null),
     null
   );
-  const errorMessage = customError || state?.error;
 
-  const [deskripsi, setDeskripsi] = useState(produk.deskripsi || "");
+  const errorMessage = customError || state?.error;
+  const fieldErrors = state?.errors || {};
+  const currentValues = state?.values || {};
+
+  const namaDefault = currentValues.nama !== undefined ? currentValues.nama : (produk.nama || "");
+  const hargaDefault = currentValues.harga !== undefined ? currentValues.harga : (produk.harga ?? "");
+  const kategoriDefault = currentValues.kategori !== undefined ? currentValues.kategori : (produk.kategori || "");
+  const fotoUrlDefault = currentValues.foto_url !== undefined ? currentValues.foto_url : (produk.foto_url || "");
+  const fotoTambahanDefault = currentValues.foto_tambahan !== undefined
+    ? currentValues.foto_tambahan
+    : Array.isArray(produk.foto_tambahan)
+    ? produk.foto_tambahan.join("\n")
+    : typeof produk.foto_tambahan === "string"
+    ? produk.foto_tambahan
+    : "";
+
+  const [deskripsi, setDeskripsi] = useState(
+    currentValues.deskripsi !== undefined ? currentValues.deskripsi : (produk.deskripsi || "")
+  );
   const [isGeneratingAI, setIsGeneratingAI] = useState(false);
   const [aiError, setAiError] = useState(null);
 
@@ -53,21 +69,77 @@ export default function FormProduk({
   return (
     <form action={formAction} encType="multipart/form-data" className="flex max-w-xl flex-col gap-4">
       {errorMessage && (
-        <p className="rounded-lg border border-garis bg-permukaan p-3 text-sm text-bahaya">
+        <div className="rounded-xl border border-bahaya/30 bg-bahaya/10 p-3.5 text-sm font-semibold text-bahaya">
           {errorMessage}
-        </p>
+        </div>
       )}
+
       {produk.id && <input type="hidden" name="id" value={produk.id} />}
-      <Input label="Nama produk" name="nama" defaultValue={produk.nama} required />
-      <Input
-        label="Harga (Rp)"
-        name="harga"
-        type="number"
-        min="0"
-        defaultValue={produk.harga}
-        required
-      />
-      <Input label="Kategori" name="kategori" defaultValue={produk.kategori} />
+
+      {/* Field Nama Produk dengan validasi per field (US-34) */}
+      <div className="flex flex-col gap-1">
+        <Input
+          label="Nama produk"
+          name="nama"
+          defaultValue={namaDefault}
+          className={fieldErrors.nama ? "border-bahaya focus:border-bahaya" : ""}
+          required
+        />
+        {fieldErrors.nama && (
+          <p className="text-xs font-semibold text-bahaya">{fieldErrors.nama}</p>
+        )}
+      </div>
+
+      {/* Field Harga dengan validasi per field (US-34) */}
+      <div className="flex flex-col gap-1">
+        <Input
+          label="Harga (Rp)"
+          name="harga"
+          type="number"
+          min="0"
+          defaultValue={hargaDefault}
+          className={fieldErrors.harga ? "border-bahaya focus:border-bahaya" : ""}
+          required
+        />
+        {fieldErrors.harga && (
+          <p className="text-xs font-semibold text-bahaya">{fieldErrors.harga}</p>
+        )}
+      </div>
+
+      {/* Field Kategori dengan daftar pilihan dinamis (US-31) */}
+      <div className="flex flex-col gap-1.5 text-sm font-semibold">
+        <label htmlFor="kategori">Kategori</label>
+        <div className="flex flex-col gap-2">
+          {daftarKategori.length > 0 && (
+            <select
+              id="kategori-pilih"
+              defaultValue={kategoriDefault}
+              onChange={(e) => {
+                const targetInput = document.getElementById("kategori");
+                if (targetInput && e.target.value) {
+                  targetInput.value = e.target.value;
+                }
+              }}
+              className="rounded-lg border border-garis bg-latar px-3 py-2 text-sm text-teks focus:border-utama focus:outline-none"
+            >
+              <option value="">-- Pilih dari kategori yang ada --</option>
+              {daftarKategori.map((k) => (
+                <option key={k} value={k}>
+                  {k}
+                </option>
+              ))}
+            </select>
+          )}
+          <input
+            id="kategori"
+            type="text"
+            name="kategori"
+            placeholder="Ketik kategori atau pilih di atas..."
+            defaultValue={kategoriDefault}
+            className="rounded-lg border border-garis bg-latar px-3 py-2 text-base font-normal text-teks placeholder:text-teks-lembut focus:border-utama focus:outline-none"
+          />
+        </div>
+      </div>
 
       {/* Foto utama: input file (prioritas) + URL manual sebagai opsi (US-29) */}
       <div className="flex flex-col gap-2">
@@ -87,7 +159,7 @@ export default function FormProduk({
           label="Link foto (URL manual)"
           name="foto_url"
           placeholder="https://... atau /produk/nama-file.svg"
-          defaultValue={produk.foto_url}
+          defaultValue={fotoUrlDefault}
         />
       </div>
 
@@ -112,13 +184,7 @@ export default function FormProduk({
             name="foto_tambahan"
             rows={3}
             placeholder={"https://example.com/foto1.jpg\n/produk/keripik.svg"}
-            defaultValue={
-              Array.isArray(produk.foto_tambahan)
-                ? (produk.foto_tambahan || []).join("\n")
-                : typeof produk.foto_tambahan === "string"
-                ? produk.foto_tambahan
-                : ""
-            }
+            defaultValue={fotoTambahanDefault}
             className="w-full rounded-lg border border-garis bg-latar px-3 py-2.5 text-base font-normal text-teks placeholder:text-teks-lembut focus:border-utama focus:outline-none"
           />
         </div>
@@ -150,9 +216,9 @@ export default function FormProduk({
         />
       </div>
 
-      <div className="flex gap-3">
+      <div className="flex gap-3 pt-2">
         <Tombol type="submit" disabled={isPending}>
-          {labelTombol}
+          {isPending ? "Menyimpan..." : labelTombol}
         </Tombol>
         <Tombol href="/admin" varian="garis">
           Batal

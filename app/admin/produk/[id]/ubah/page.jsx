@@ -1,7 +1,7 @@
 import { notFound, redirect } from "next/navigation";
 import NavAdmin from "@/components/NavAdmin";
 import FormProduk from "@/components/FormProduk";
-import { ubahProduk } from "@/app/admin/actions";
+import { ubahProduk, ambilKategoriDenganJumlah } from "@/app/admin/actions";
 import { createSessionClient } from "@/lib/supabase/session";
 import { createServerClient } from "@/lib/supabase/server";
 
@@ -44,12 +44,16 @@ export default async function HalamanUbahProduk({ params }) {
     notFound();
   }
 
+  const kategoriData = await ambilKategoriDenganJumlah();
+  const daftarKategori = (kategoriData || []).map((k) => k.nama);
+
   return (
     <div className="flex flex-col gap-6 py-8">
       <NavAdmin />
       <h1 className="text-2xl font-extrabold">Ubah produk</h1>
       <FormProduk
         produk={produk}
+        daftarKategori={daftarKategori}
         action={ubahProduk}
         labelTombol="Simpan perubahan"
       />

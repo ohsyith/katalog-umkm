@@ -2,6 +2,7 @@ import Link from "next/link";
 import KartuProduk from "@/components/KartuProduk";
 import Tombol from "@/components/Tombol";
 import { toko } from "@/lib/toko";
+import { apakahProdukAktif } from "@/lib/format";
 import { createServerClient } from "@/lib/supabase/server";
 
 export const dynamic = "force-dynamic";
@@ -53,7 +54,11 @@ export default async function HalamanKatalog({ searchParams }) {
     }
 
     // Query daftar produk sesuai filter kategori, pencarian, dan urutan di database dengan range paginasi (US-16)
-    let query = supabase.from("produk").select("*", { count: "exact" });
+    // Saring keluar produk nonaktif agar tidak muncul di katalog publik (US-32)
+    let query = supabase
+      .from("produk")
+      .select("*", { count: "exact" })
+      .not("deskripsi", "ilike", "%[nonaktif]%");
 
     if (kategoriDipilih) {
       query = query.eq("kategori", kategoriDipilih);
@@ -95,7 +100,7 @@ export default async function HalamanKatalog({ searchParams }) {
     if (error) {
       pesanError = `Gagal memuat produk: ${error.message}`;
     } else {
-      daftarProduk = data;
+      daftarProduk = (data || []).filter((p) => apakahProdukAktif(p));
     }
   } catch (err) {
     pesanError = err.message || "Gagal memuat data produk.";

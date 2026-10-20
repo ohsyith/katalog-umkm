@@ -1,14 +1,22 @@
 import NavAdmin from "@/components/NavAdmin";
 import FormProduk from "@/components/FormProduk";
-import { tambahProduk } from "@/app/admin/actions";
+import { tambahProduk, ambilKategoriDenganJumlah } from "@/app/admin/actions";
 
-// US-08 (bonus di jalur offline): tambah produk.
-export default function HalamanTambahProduk() {
+export const dynamic = "force-dynamic";
+
+export default async function HalamanTambahProduk() {
+  const kategoriData = await ambilKategoriDenganJumlah();
+  const daftarKategori = (kategoriData || []).map((k) => k.nama);
+
   return (
     <div className="flex flex-col gap-6 py-8">
       <NavAdmin />
       <h1 className="text-2xl font-extrabold">Tambah produk</h1>
-      <FormProduk action={tambahProduk} labelTombol="Simpan produk" />
+      <FormProduk
+        daftarKategori={daftarKategori}
+        action={tambahProduk}
+        labelTombol="Simpan produk"
+      />
     </div>
   );
 }

@@ -28,7 +28,6 @@ export async function requireAuth() {
  * Dipanggil dari form di app/admin/login/page.jsx.
  */
 export async function login(prevState, formData) {
-  // Mendukung pemanggilan baik melalui useActionState maupun form action langsung
   const data = formData instanceof FormData ? formData : prevState;
   const email = data?.get("email")?.toString()?.trim();
   const password = data?.get("password")?.toString();
@@ -53,20 +52,15 @@ export async function login(prevState, formData) {
   }
 
   if (authError) {
-    return {
-      error:
-        authError.message === "Invalid login credentials"
-          ? "Email atau password salah. Silakan periksa kembali."
-          : authError.message || "Gagal masuk. Silakan coba lagi.",
-    };
+    return { error: "Email atau password salah." };
   }
 
   redirect("/admin");
 }
 
 /**
- * Server Action untuk mengakhiri sesi admin (logout)
- * dan mengarahkan kembali ke halaman login.
+ * Server Action untuk keluar (logout) admin.
+ * Menghapus sesi auth di cookie via Supabase Auth.
  */
 export async function logout() {
   try {
@@ -92,66 +86,60 @@ export async function gantiPassword(prevState, formData) {
     return { error: "Semua kolom password wajib diisi." };
   }
 
-  if (passwordBaru.length < 8) {
-    return { error: "Password baru minimal 8 karakter." };
+  if (passwordBaru.length < 6) {
+    return { error: "Password baru minimal 6 karakter." };
   }
 
   if (passwordBaru !== konfirmasiPassword) {
-    return { error: "Konfirmasi password tidak sama dengan password baru." };
+    return { error: "Konfirmasi password tidak cocok dengan password baru." };
+  }
+
+  let supabase;
+  try {
+    const authResult = await requireAuth();
+    supabase = authResult.supabase;
+  } catch (err) {
+    return { error: "Akses ditolak: kamu harus login sebagai admin." };
   }
 
   try {
-    const { supabase } = await requireAuth();
-
     const { error } = await supabase.auth.updateUser({
       password: passwordBaru,
     });
 
     if (error) {
-      return {
-        error: error.message || "Gagal mengganti password.",
-      };
+      return { error: `Gagal mengganti password: ${error.message}` };
     }
-
-    return { success: "Password berhasil diganti." };
   } catch (err) {
     return {
       error: err.message || "Terjadi kesalahan saat mengganti password.",
     };
   }
+
+  return { success: true };
 }
 
 /**
- * Helper untuk memvalidasi dan mem-parsing daftar URL foto tambahan (US-18).
- * Mendukung pemisah baris baru (\n, \r\n) maupun koma (,).
- * Menerima URL lengkap (http/https), path lokal (/produk/...), maupun nama domain (www.).
- * Mengembalikan array string URL yang valid atau array kosong [].
+ * Helper untuk mem-parsing textarea foto_tambahan menjadi array URL teks bersih (US-18).
  */
-function parseFotoTambahan(rawInput) {
-  if (!rawInput) return [];
-  const baris = rawInput.toString().split(/[\r\n,]+/);
-  const hasil = [];
-  for (const b of baris) {
-    const trimmed = b.trim();
-    if (!trimmed) continue;
-    const lower = trimmed.toLowerCase();
-    if (
-      lower.startsWith("http://") ||
-      lower.startsWith("https://") ||
-      lower.startsWith("/") ||
-      lower.startsWith("www.") ||
-      trimmed.includes("/") ||
-      trimmed.includes(".")
-    ) {
-      hasil.push(lower.startsWith("www.") ? `https://${trimmed}` : trimmed);
-    }
+function parseFotoTambahan(input) {
+  if (!input) return [];
+
+  let teks = "";
+  if (typeof input === "string") {
+    teks = input;
+  } else if (typeof input?.toString === "function") {
+    teks = input.toString();
   }
-  return hasil;
+
+  return teks
+    .split("\n")
+    .map((baris) => baris.trim())
+    .filter((baris) => baris.length > 0);
 }
 
 /**
  * Helper untuk membuat path unik yang aman di Supabase Storage (US-29).
- * Mengganti karakter non-aman pada nama file dengan tanda hubung.
  */
 function buatPathStorage(namaFile) {
   const namaAman = namaFile
@@ -164,9 +152,6 @@ function buatPathStorage(namaFile) {
 
 /**
  * Validasi MIME type dan ukuran file gambar (US-29).
- * Tipe yang diizinkan: image/jpeg, image/png, image/webp, image/gif.
- * Ukuran maksimal: 2 MB per file.
- * Mengembalikan null jika valid, atau string pesan error jika tidak valid.
  */
 function validasiFileFoto(file) {
   const MIME_DIIZINKAN = ["image/jpeg", "image/png", "image/webp", "image/gif"];
@@ -186,7 +171,6 @@ function validasiFileFoto(file) {
 
 /**
  * Upload satu file ke Supabase Storage bucket "produk" menggunakan server client.
- * Mengembalikan URL publik file, atau melempar error jika gagal.
  */
 async function uploadFileFoto(supabase, file) {
   const path = buatPathStorage(file.name);
@@ -202,7 +186,7 @@ async function uploadFileFoto(supabase, file) {
 
   if (uploadError) {
     throw new Error(
-      `Gagal mengunggah foto "${file.name}" ke Storage. Pastikan bucket 'produk' sudah dibuat dan dapat diakses. Detail: ${uploadError.message}`
+      `Gagal mengunggah foto "${file.name}" ke Storage. Pastikan bucket 'produk' sudah dibuat. Detail: ${uploadError.message}`
     );
   }
 
@@ -212,7 +196,7 @@ async function uploadFileFoto(supabase, file) {
 
 /**
  * Server Action untuk menambah produk baru ke tabel "produk" di Supabase.
- * Dipanggil dari form di app/admin/produk/baru/page.jsx.
+ * Dilengkapi validasi server per field (US-34).
  */
 export async function tambahProduk(prevState, formData) {
   const data = formData instanceof FormData ? formData : prevState;
@@ -221,33 +205,48 @@ export async function tambahProduk(prevState, formData) {
   const hargaRaw = data?.get("harga")?.toString()?.trim();
   const kategori = data?.get("kategori")?.toString()?.trim() || null;
   let foto_url = data?.get("foto_url")?.toString()?.trim() || null;
-  const foto_tambahan_url = parseFotoTambahan(data?.get("foto_tambahan"));
+  const foto_tambahan_raw = data?.get("foto_tambahan")?.toString() || "";
+  const foto_tambahan_url = parseFotoTambahan(foto_tambahan_raw);
   const deskripsi = data?.get("deskripsi")?.toString()?.trim() || null;
 
-  // Ambil file yang diunggah (US-29)
-  const fotoFile = data?.get("foto_file");
-  const fotoTambahanFiles = data?.getAll("foto_tambahan_files") ?? [];
-
+  // Validasi per field di server (US-34)
+  const errors = {};
   if (!nama) {
-    return { error: "Nama produk wajib diisi." };
+    errors.nama = "Nama produk wajib diisi.";
   }
 
   const harga = parseInt(hargaRaw, 10);
-  if (isNaN(harga) || harga < 0) {
-    return { error: "Harga produk harus berupa angka dan tidak boleh negatif." };
+  if (hargaRaw === undefined || hargaRaw === "" || isNaN(harga) || harga < 0) {
+    errors.harga = "Harga produk harus berupa angka positif (minimal 0).";
   }
 
-  // requireAuth terlebih dahulu (wajib sebelum upload)
-  let supabase;
+  if (Object.keys(errors).length > 0) {
+    return {
+      error: "Terdapat data yang belum sesuai. Periksa input yang ditandai.",
+      errors,
+      values: {
+        nama: nama || "",
+        harga: hargaRaw || "",
+        kategori: kategori || "",
+        foto_url: foto_url || "",
+        foto_tambahan: foto_tambahan_raw,
+        deskripsi: deskripsi || "",
+      },
+    };
+  }
+
+  // requireAuth di server
   try {
-    const authResult = await requireAuth();
-    supabase = authResult.supabase;
+    await requireAuth();
   } catch (err) {
     return { error: "Akses ditolak: kamu harus login sebagai admin." };
   }
 
-  // Selalu gunakan createServerClient untuk operasi Storage (service role)
   const serverClient = createServerClient();
+
+  // Ambil file yang diunggah (US-29)
+  const fotoFile = data?.get("foto_file");
+  const fotoTambahanFiles = data?.getAll("foto_tambahan_files") ?? [];
 
   // Validasi dan upload foto utama
   if (fotoFile instanceof File && fotoFile.size > 0) {
@@ -279,13 +278,12 @@ export async function tambahProduk(prevState, formData) {
     }
   }
 
-  // Gabungkan URL dari textarea dengan URL dari file upload (tanpa duplikasi)
   const semuaFotoTambahan = [
     ...fotoTambahanUpload,
     ...foto_tambahan_url.filter((u) => !fotoTambahanUpload.includes(u)),
   ];
 
-  const { data: insertedData, error: insertError } = await serverClient
+  const { error: insertError } = await serverClient
     .from("produk")
     .insert({
       nama,
@@ -294,15 +292,12 @@ export async function tambahProduk(prevState, formData) {
       foto_url,
       foto_tambahan: semuaFotoTambahan,
       deskripsi,
-    })
-    .select();
+    });
 
   if (insertError) {
     console.error("Gagal insert produk:", insertError);
     return { error: `Gagal menyimpan produk: ${insertError.message}` };
   }
-
-  console.log("cek setelah simpan (insert):", insertedData);
 
   revalidatePath("/");
   revalidatePath("/admin");
@@ -311,7 +306,7 @@ export async function tambahProduk(prevState, formData) {
 
 /**
  * Server Action untuk mengubah produk yang sudah ada di database Supabase.
- * Dipanggil dari form di app/admin/produk/[id]/ubah/page.jsx.
+ * Dilengkapi validasi server per field (US-34).
  */
 export async function ubahProduk(prevState, formData) {
   const data = formData instanceof FormData ? formData : prevState;
@@ -322,37 +317,52 @@ export async function ubahProduk(prevState, formData) {
   const hargaRaw = data?.get("harga")?.toString()?.trim();
   const kategori = data?.get("kategori")?.toString()?.trim() || null;
   let foto_url = data?.get("foto_url")?.toString()?.trim() || null;
-  const foto_tambahan_url = parseFotoTambahan(data?.get("foto_tambahan"));
+  const foto_tambahan_raw = data?.get("foto_tambahan")?.toString() || "";
+  const foto_tambahan_url = parseFotoTambahan(foto_tambahan_raw);
   const deskripsi = data?.get("deskripsi")?.toString()?.trim() || null;
-
-  // Ambil file yang diunggah (US-29)
-  const fotoFile = data?.get("foto_file");
-  const fotoTambahanFiles = data?.getAll("foto_tambahan_files") ?? [];
 
   if (!id) {
     return { error: "ID produk tidak valid." };
   }
 
+  // Validasi per field di server (US-34)
+  const errors = {};
   if (!nama) {
-    return { error: "Nama produk wajib diisi." };
+    errors.nama = "Nama produk wajib diisi.";
   }
 
   const harga = parseInt(hargaRaw, 10);
-  if (isNaN(harga) || harga < 0) {
-    return { error: "Harga produk harus berupa angka dan tidak boleh negatif." };
+  if (hargaRaw === undefined || hargaRaw === "" || isNaN(harga) || harga < 0) {
+    errors.harga = "Harga produk harus berupa angka positif (minimal 0).";
   }
 
-  // requireAuth terlebih dahulu (wajib sebelum upload)
+  if (Object.keys(errors).length > 0) {
+    return {
+      error: "Terdapat data yang belum sesuai. Periksa input yang ditandai.",
+      errors,
+      values: {
+        id,
+        nama: nama || "",
+        harga: hargaRaw || "",
+        kategori: kategori || "",
+        foto_url: foto_url || "",
+        foto_tambahan: foto_tambahan_raw,
+        deskripsi: deskripsi || "",
+      },
+    };
+  }
+
   try {
     await requireAuth();
   } catch (err) {
     return { error: "Akses ditolak: kamu harus login sebagai admin." };
   }
 
-  // Selalu gunakan createServerClient untuk operasi Storage (service role)
   const serverClient = createServerClient();
 
-  // Validasi dan upload foto utama (jika dipilih, timpa foto_url lama)
+  const fotoFile = data?.get("foto_file");
+  const fotoTambahanFiles = data?.getAll("foto_tambahan_files") ?? [];
+
   if (fotoFile instanceof File && fotoFile.size > 0) {
     const errValidasi = validasiFileFoto(fotoFile);
     if (errValidasi) return { error: errValidasi };
@@ -364,7 +374,6 @@ export async function ubahProduk(prevState, formData) {
     }
   }
 
-  // Validasi dan upload foto tambahan
   const fotoTambahanUpload = [];
   const validFiles = fotoTambahanFiles.filter(
     (f) => f instanceof File && f.size > 0
@@ -382,13 +391,12 @@ export async function ubahProduk(prevState, formData) {
     }
   }
 
-  // Gabungkan URL dari textarea dengan URL dari file upload (tanpa duplikasi)
   const semuaFotoTambahan = [
     ...fotoTambahanUpload,
     ...foto_tambahan_url.filter((u) => !fotoTambahanUpload.includes(u)),
   ];
 
-  const { data: updatedData, error: updateError } = await serverClient
+  const { error: updateError } = await serverClient
     .from("produk")
     .update({
       nama,
@@ -398,15 +406,12 @@ export async function ubahProduk(prevState, formData) {
       foto_tambahan: semuaFotoTambahan,
       deskripsi,
     })
-    .eq("id", id)
-    .select();
+    .eq("id", id);
 
   if (updateError) {
     console.error("Gagal update produk:", updateError);
     return { error: `Gagal memperbarui produk: ${updateError.message}` };
   }
-
-  console.log("cek setelah simpan (update):", updatedData);
 
   revalidatePath("/");
   revalidatePath("/admin");
@@ -415,8 +420,65 @@ export async function ubahProduk(prevState, formData) {
 }
 
 /**
- * Server Action untuk menghapus baris produk dari tabel "produk" di Supabase berdasarkan id.
- * Dipanggil dari tombol Hapus di components/TabelProduk.jsx.
+ * Server Action untuk toggle status aktif/nonaktif produk (US-32).
+ */
+export async function toggleStatusProduk(idProduk) {
+  try {
+    await requireAuth();
+  } catch {
+    return { error: "Akses ditolak: admin belum login." };
+  }
+
+  const id = parseInt(idProduk, 10) || idProduk;
+  const serverClient = createServerClient();
+
+  const { data: produk, error: fetchError } = await serverClient
+    .from("produk")
+    .select("id, deskripsi")
+    .eq("id", id)
+    .maybeSingle();
+
+  if (fetchError || !produk) {
+    return { error: "Produk tidak ditemukan." };
+  }
+
+  // Tentukan status saat ini
+  const isNonaktif = produk.deskripsi && produk.deskripsi.includes("[nonaktif]");
+  const statusBaruAktif = isNonaktif; // Jika sekarang nonaktif, jadikan aktif
+
+  let deskripsiBaru = produk.deskripsi || "";
+  if (!statusBaruAktif) {
+    if (!deskripsiBaru.includes("[nonaktif]")) {
+      deskripsiBaru = `${deskripsiBaru} [nonaktif]`.trim();
+    }
+  } else {
+    deskripsiBaru = deskripsiBaru.replace(/\[nonaktif\]/g, "").trim();
+  }
+
+  // Coba update (baik deskripsi maupun kolom aktif jika ada)
+  try {
+    const { error: updateError } = await serverClient
+      .from("produk")
+      .update({
+        deskripsi: deskripsiBaru,
+      })
+      .eq("id", id);
+
+    if (updateError) {
+      return { error: `Gagal mengubah status: ${updateError.message}` };
+    }
+  } catch (err) {
+    return { error: err.message || "Gagal mengubah status produk." };
+  }
+
+  revalidatePath("/");
+  revalidatePath("/admin");
+  revalidatePath(`/produk/${id}`);
+  return { success: true, aktif: statusBaruAktif };
+}
+
+/**
+ * Server Action untuk menghapus baris produk dari tabel "produk" di Supabase.
  */
 export async function hapusProduk(idOrFormData) {
   const id =
@@ -430,21 +492,18 @@ export async function hapusProduk(idOrFormData) {
     return { error: "ID produk tidak valid." };
   }
 
-  let supabase;
   try {
-    const authResult = await requireAuth();
-    supabase = authResult.supabase;
+    await requireAuth();
   } catch (err) {
     return { error: "Akses ditolak: kamu harus login sebagai admin." };
   }
 
-  const { error: deleteError } = await supabase
-    .from("produk")
-    .delete()
-    .eq("id", id);
+  const serverClient = createServerClient();
 
-  if (deleteError) {
-    return { error: `Gagal menghapus produk: ${deleteError.message}` };
+  const { error } = await serverClient.from("produk").delete().eq("id", id);
+
+  if (error) {
+    return { error: `Gagal menghapus produk: ${error.message}` };
   }
 
   revalidatePath("/");
@@ -454,12 +513,191 @@ export async function hapusProduk(idOrFormData) {
 }
 
 /**
- * Server Action untuk membuat deskripsi produk secara otomatis dengan Gemini API.
- * Dipanggil dari form produk (US-14).
- * Kunci API tersimpan aman di server melalui environment variable GEMINI_API_KEY.
- *
- * Catatan: Gemini 2.0 Flash sudah dimatikan per 1 Juni 2026.
- * Model yang dipakai sekarang adalah gemini-3.8-flash.
+ * Helper untuk mengambil daftar kategori beserta jumlah produknya (US-31).
+ */
+export async function ambilKategoriDenganJumlah() {
+  const serverClient = createServerClient();
+
+  const { data: produkList } = await serverClient
+    .from("produk")
+    .select("kategori");
+
+  const hitungan = {};
+  for (const p of produkList || []) {
+    const kat = p.kategori?.trim();
+    if (kat) {
+      hitungan[kat] = (hitungan[kat] || 0) + 1;
+    }
+  }
+
+  let kategoriTabel = [];
+  try {
+    const { data: katData } = await serverClient
+      .from("kategori")
+      .select("nama")
+      .order("nama", { ascending: true });
+    if (katData) {
+      kategoriTabel = katData;
+    }
+  } catch {
+    // Abaikan jika tabel kategori belum dibuat di Supabase
+  }
+
+  const setKategori = new Set([
+    ...kategoriTabel.map((k) => k.nama),
+    ...Object.keys(hitungan),
+  ]);
+
+  return Array.from(setKategori)
+    .sort()
+    .map((nama) => ({
+      nama,
+      jumlahProduk: hitungan[nama] || 0,
+    }));
+}
+
+/**
+ * Server Action untuk menambah kategori baru (US-31).
+ */
+export async function tambahKategori(prevState, formData) {
+  try {
+    await requireAuth();
+  } catch {
+    return { error: "Akses ditolak: admin belum login." };
+  }
+
+  const data = formData instanceof FormData ? formData : prevState;
+  const nama = data?.get("nama")?.toString()?.trim();
+
+  if (!nama) {
+    return { error: "Nama kategori wajib diisi." };
+  }
+
+  const serverClient = createServerClient();
+  try {
+    const { error } = await serverClient.from("kategori").insert({ nama });
+    if (error) {
+      if (error.code === "23505") {
+        return { error: `Kategori "${nama}" sudah ada.` };
+      }
+      return { error: `Gagal menambah kategori: ${error.message}` };
+    }
+  } catch (err) {
+    return { error: err.message };
+  }
+
+  revalidatePath("/admin/kategori");
+  revalidatePath("/admin");
+  revalidatePath("/");
+  return { success: true };
+}
+
+/**
+ * Server Action untuk mengubah nama kategori (US-31).
+ * Otomatis memperbarui kolom kategori di semua produk terkait.
+ */
+export async function ubahKategori(prevState, formData) {
+  try {
+    await requireAuth();
+  } catch {
+    return { error: "Akses ditolak: admin belum login." };
+  }
+
+  const data = formData instanceof FormData ? formData : prevState;
+  const namaLama = data?.get("namaLama")?.toString()?.trim();
+  const namaBaru = data?.get("namaBaru")?.toString()?.trim();
+
+  if (!namaLama || !namaBaru) {
+    return { error: "Nama lama dan nama baru wajib diisi." };
+  }
+
+  if (namaLama.toLowerCase() === namaBaru.toLowerCase()) {
+    return { error: "Nama baru tidak boleh sama persis dengan nama lama." };
+  }
+
+  const serverClient = createServerClient();
+
+  // 1. Update nama kategori di seluruh produk terkait
+  const { error: errProduk } = await serverClient
+    .from("produk")
+    .update({ kategori: namaBaru })
+    .eq("kategori", namaLama);
+
+  if (errProduk) {
+    return { error: `Gagal memperbarui kategori pada produk: ${errProduk.message}` };
+  }
+
+  // 2. Update di tabel kategori jika tabel ada
+  try {
+    await serverClient
+      .from("kategori")
+      .update({ nama: namaBaru })
+      .eq("nama", namaLama);
+  } catch {
+    // Abaikan jika tabel kategori belum dibuat
+  }
+
+  revalidatePath("/admin/kategori");
+  revalidatePath("/admin");
+  revalidatePath("/");
+  return { success: true };
+}
+
+/**
+ * Server Action untuk menghapus kategori (US-31).
+ * Menolak penghapusan jika masih ada produk yang menggunakan kategori ini.
+ */
+export async function hapusKategori(namaKategori) {
+  try {
+    await requireAuth();
+  } catch {
+    return { error: "Akses ditolak: admin belum login." };
+  }
+
+  const nama =
+    namaKategori instanceof FormData
+      ? namaKategori.get("nama")?.toString()?.trim()
+      : typeof namaKategori === "string"
+      ? namaKategori.trim()
+      : null;
+
+  if (!nama) {
+    return { error: "Nama kategori tidak valid." };
+  }
+
+  const serverClient = createServerClient();
+
+  // Periksa apakah kategori masih dipakai oleh produk (US-31)
+  const { count, error: errCount } = await serverClient
+    .from("produk")
+    .select("*", { count: "exact", head: true })
+    .eq("kategori", nama);
+
+  if (errCount) {
+    return { error: `Gagal memeriksa pemakaian kategori: ${errCount.message}` };
+  }
+
+  if (count && count > 0) {
+    return {
+      error: `Kategori "${nama}" masih digunakan oleh ${count} produk. Pindahkan atau hapus produk terkait terlebih dahulu sebelum menghapus kategori ini.`,
+    };
+  }
+
+  // Hapus dari tabel kategori jika ada
+  try {
+    await serverClient.from("kategori").delete().eq("nama", nama);
+  } catch {
+    // Abaikan
+  }
+
+  revalidatePath("/admin/kategori");
+  revalidatePath("/admin");
+  revalidatePath("/");
+  return { success: true };
+}
+
+/**
+ * Server Action untuk membuat deskripsi produk secara otomatis dengan Gemini API (US-14).
  */
 export async function buatDeskripsiAI(nama, kategori) {
   try {
@@ -483,7 +721,6 @@ export async function buatDeskripsiAI(nama, kategori) {
   const prompt = `Buat deskripsi produk dalam bahasa Indonesia yang menarik, singkat (1-2 kalimat), dan cocok untuk katalog toko UMKM.\nNama produk: ${nama.trim()}\nKategori: ${kategori?.trim() || "Umum"}\nBerikan hanya teks deskripsi produk saja tanpa tanda petik, awalan, atau catatan tambahan.`;
 
   try {
-    // Model utama: gemini-3.8-flash
     let response = await fetch(
       "https://generativelanguage.googleapis.com/v1beta/models/gemini-3.8-flash:generateContent",
       {
@@ -498,7 +735,6 @@ export async function buatDeskripsiAI(nama, kategori) {
       }
     );
 
-    // Fallback ke gemini-3.7-flash jika 3.8-flash mengembalikan 404
     if (!response.ok && response.status === 404) {
       response = await fetch(
         "https://generativelanguage.googleapis.com/v1beta/models/gemini-3.7-flash:generateContent",
@@ -537,4 +773,6 @@ export async function buatDeskripsiAI(nama, kategori) {
       error: err.message || "Terjadi kesalahan saat memanggil Gemini API.",
     };
   }
+}
+
 }

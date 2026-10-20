@@ -774,5 +774,3 @@ export async function buatDeskripsiAI(nama, kategori) {
     };
   }
 }
-
-}

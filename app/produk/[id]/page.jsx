@@ -10,9 +10,52 @@ import {
   apakahProdukHabis,
   apakahAdaDiskon,
 } from "@/lib/format";
+import { toko } from "@/lib/toko";
 import { createServerClient } from "@/lib/supabase/server";
 
 export const dynamic = "force-dynamic";
+
+export async function generateMetadata({ params }) {
+  const { id } = await params;
+  const supabase = createServerClient();
+
+  const { data: produk } = await supabase
+    .from("produk")
+    .select("nama, deskripsi, foto_url")
+    .eq("id", id)
+    .maybeSingle();
+
+  if (!produk) {
+    return {
+      title: "Produk Tidak Ditemukan",
+    };
+  }
+
+  // Bersihkan tag teknis kurung siku [diskon: ...], [baru], dsb. dari deskripsi publik (US-26)
+  const deskripsiBersih = produk.deskripsi
+    ? produk.deskripsi.replace(/\[.*?\]/g, "").trim()
+    : `Beli ${produk.nama} kualitas terbaik di ${toko.nama}.`;
+
+  const judul = `${produk.nama} - ${toko.nama}`;
+  const foto = produk.foto_url || undefined;
+
+  return {
+    title: judul,
+    description: deskripsiBersih,
+    openGraph: {
+      title: judul,
+      description: deskripsiBersih,
+      type: "website",
+      images: foto ? [{ url: foto, alt: produk.nama }] : [],
+    },
+    twitter: {
+      card: "summary_large_image",
+      title: judul,
+      description: deskripsiBersih,
+      images: foto ? [foto] : [],
+    },
+  };
+}
 
 export default async function HalamanDetailProduk({ params }) {
   const { id } = await params;

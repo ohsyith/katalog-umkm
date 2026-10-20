@@ -4,6 +4,24 @@ import { redirect } from "next/navigation";
 import { createSessionClient } from "@/lib/supabase/session";
 
 /**
+ * Helper untuk memastikan admin sudah login sebelum menjalankan aksi yang mengubah data.
+ * Memeriksa sesi auth dari cookie di server.
+ */
+export async function requireAuth() {
+  const supabase = await createSessionClient();
+  const {
+    data: { user },
+    error,
+  } = await supabase.auth.getUser();
+
+  if (error || !user) {
+    throw new Error("Akses ditolak: admin belum login.");
+  }
+
+  return { user, supabase };
+}
+
+/**
  * Server Action untuk memproses login admin menggunakan Supabase Auth.
  * Dipanggil dari form di app/admin/login/page.jsx.
  */
@@ -81,15 +99,7 @@ export async function gantiPassword(prevState, formData) {
   }
 
   try {
-    const supabase = await createSessionClient();
-    const {
-      data: { user },
-      error: userError,
-    } = await supabase.auth.getUser();
-
-    if (userError || !user) {
-      return { error: "Kamu harus login terlebih dahulu." };
-    }
+    const { supabase } = await requireAuth();
 
     const { error } = await supabase.auth.updateUser({
       password: passwordBaru,

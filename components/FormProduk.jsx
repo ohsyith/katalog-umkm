@@ -74,6 +74,25 @@ export default function FormProduk({
         placeholder="https://... atau /produk/nama-file.svg"
         defaultValue={produk.foto_url}
       />
+      <div className="flex flex-col gap-1.5 text-sm font-semibold">
+        <label htmlFor="foto_tambahan">
+          Foto Tambahan (satu URL per baris, opsional)
+        </label>
+        <textarea
+          id="foto_tambahan"
+          name="foto_tambahan"
+          rows={3}
+          placeholder={"https://example.com/foto1.jpg\n/produk/keripik.svg"}
+          defaultValue={
+            Array.isArray(produk.foto_tambahan)
+              ? (produk.foto_tambahan || []).join("\n")
+              : typeof produk.foto_tambahan === "string"
+              ? produk.foto_tambahan
+              : ""
+          }
+          className="w-full rounded-lg border border-garis bg-latar px-3 py-2.5 text-base font-normal text-teks placeholder:text-teks-lembut focus:border-utama focus:outline-none"
+        />
+      </div>
 
       {/* Kolom Deskripsi dengan tombol Buat deskripsi dengan AI (US-14) */}
       <div className="flex flex-col gap-1.5 text-sm font-semibold">

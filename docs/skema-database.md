@@ -9,6 +9,7 @@
 | `harga` | integer | Harga dalam rupiah, tidak boleh negatif |
 | `deskripsi` | text | Penjelasan produk |
 | `foto_url` | text | Link gambar produk |
+| `foto_tambahan` | text[] | Link gambar tambahan untuk galeri foto (US-18) |
 | `kategori` | text | Kelompok produk, misalnya "Camilan" |
 | `created_at` | timestamptz | Waktu dibuat, otomatis |
 

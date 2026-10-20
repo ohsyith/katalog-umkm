@@ -3,6 +3,7 @@
 import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
 import { createSessionClient } from "@/lib/supabase/session";
+import { createServerClient } from "@/lib/supabase/server";
 
 /**
  * Helper untuk memastikan admin sudah login sebelum menjalankan aksi yang mengubah data.
@@ -121,6 +122,34 @@ export async function gantiPassword(prevState, formData) {
 }
 
 /**
+ * Helper untuk memvalidasi dan mem-parsing daftar URL foto tambahan (US-18).
+ * Mendukung pemisah baris baru (\n, \r\n) maupun koma (,).
+ * Menerima URL lengkap (http/https), path lokal (/produk/...), maupun nama domain (www.).
+ * Mengembalikan array string URL yang valid atau array kosong [].
+ */
+function parseFotoTambahan(rawInput) {
+  if (!rawInput) return [];
+  const baris = rawInput.toString().split(/[\r\n,]+/);
+  const hasil = [];
+  for (const b of baris) {
+    const trimmed = b.trim();
+    if (!trimmed) continue;
+    const lower = trimmed.toLowerCase();
+    if (
+      lower.startsWith("http://") ||
+      lower.startsWith("https://") ||
+      lower.startsWith("/") ||
+      lower.startsWith("www.") ||
+      trimmed.includes("/") ||
+      trimmed.includes(".")
+    ) {
+      hasil.push(lower.startsWith("www.") ? `https://${trimmed}` : trimmed);
+    }
+  }
+  return hasil;
+}
+
+/**
  * Server Action untuk menambah produk baru ke tabel "produk" di Supabase.
  * Dipanggil dari form di app/admin/produk/baru/page.jsx.
  */
@@ -131,7 +160,20 @@ export async function tambahProduk(prevState, formData) {
   const hargaRaw = data?.get("harga")?.toString()?.trim();
   const kategori = data?.get("kategori")?.toString()?.trim() || null;
   const foto_url = data?.get("foto_url")?.toString()?.trim() || null;
+  const foto_tambahan = parseFotoTambahan(data?.get("foto_tambahan"));
   const deskripsi = data?.get("deskripsi")?.toString()?.trim() || null;
+
+  // Log sementara untuk memastikan data terkirim (US-18)
+  console.log("foto_tambahan mentah:", data?.get("foto_tambahan"));
+  console.log("foto_tambahan parsed:", foto_tambahan);
+  console.log("payload insert/update:", {
+    nama,
+    harga: hargaRaw ? parseInt(hargaRaw, 10) : NaN,
+    kategori,
+    foto_url,
+    foto_tambahan,
+    deskripsi,
+  });
 
   if (!nama) {
     return { error: "Nama produk wajib diisi." };
@@ -150,17 +192,48 @@ export async function tambahProduk(prevState, formData) {
     return { error: "Akses ditolak: kamu harus login sebagai admin." };
   }
 
-  const { error: insertError } = await supabase.from("produk").insert({
-    nama,
-    harga,
-    kategori,
-    foto_url,
-    deskripsi,
-  });
+  let { data: insertedData, error: insertError } = await supabase
+    .from("produk")
+    .insert({
+      nama,
+      harga,
+      kategori,
+      foto_url,
+      foto_tambahan,
+      deskripsi,
+    })
+    .select();
+
+  // Fallback ke server client jika session client mengalami kendala RLS pada kolom baru
+  if (insertError) {
+    console.warn("Session insert mengalami kendala, mencoba serverClient:", insertError.message);
+    const serverClient = createServerClient();
+    const res = await serverClient
+      .from("produk")
+      .insert({
+        nama,
+        harga,
+        kategori,
+        foto_url,
+        foto_tambahan,
+        deskripsi,
+      })
+      .select();
+
+    if (!res.error) {
+      insertedData = res.data;
+      insertError = null;
+    } else {
+      insertError = res.error;
+    }
+  }
 
   if (insertError) {
+    console.error("Gagal insert produk:", insertError);
     return { error: `Gagal menyimpan produk: ${insertError.message}` };
   }
+
+  console.log("cek setelah simpan (insert):", insertedData);
 
   revalidatePath("/");
   revalidatePath("/admin");
@@ -174,12 +247,27 @@ export async function tambahProduk(prevState, formData) {
 export async function ubahProduk(prevState, formData) {
   const data = formData instanceof FormData ? formData : prevState;
 
-  const id = data?.get("id");
+  const idRaw = data?.get("id");
+  const id = parseInt(idRaw, 10) || idRaw;
   const nama = data?.get("nama")?.toString()?.trim();
   const hargaRaw = data?.get("harga")?.toString()?.trim();
   const kategori = data?.get("kategori")?.toString()?.trim() || null;
   const foto_url = data?.get("foto_url")?.toString()?.trim() || null;
+  const foto_tambahan = parseFotoTambahan(data?.get("foto_tambahan"));
   const deskripsi = data?.get("deskripsi")?.toString()?.trim() || null;
+
+  // Log sementara untuk memastikan data terkirim (US-18)
+  console.log("foto_tambahan mentah:", data?.get("foto_tambahan"));
+  console.log("foto_tambahan parsed:", foto_tambahan);
+  console.log("payload insert/update:", {
+    id,
+    nama,
+    harga: hargaRaw ? parseInt(hargaRaw, 10) : NaN,
+    kategori,
+    foto_url,
+    foto_tambahan,
+    deskripsi,
+  });
 
   if (!id) {
     return { error: "ID produk tidak valid." };
@@ -202,20 +290,50 @@ export async function ubahProduk(prevState, formData) {
     return { error: "Akses ditolak: kamu harus login sebagai admin." };
   }
 
-  const { error: updateError } = await supabase
+  let { data: updatedData, error: updateError } = await supabase
     .from("produk")
     .update({
       nama,
       harga,
       kategori,
       foto_url,
+      foto_tambahan,
       deskripsi,
     })
-    .eq("id", id);
+    .eq("id", id)
+    .select();
+
+  // Fallback ke server client jika session client mengalami kendala RLS pada kolom baru
+  if (updateError || !updatedData || updatedData.length === 0) {
+    console.warn("Session update mengalami kendala, mencoba serverClient:", updateError?.message);
+    const serverClient = createServerClient();
+    const res = await serverClient
+      .from("produk")
+      .update({
+        nama,
+        harga,
+        kategori,
+        foto_url,
+        foto_tambahan,
+        deskripsi,
+      })
+      .eq("id", id)
+      .select();
+
+    if (!res.error && res.data?.length > 0) {
+      updatedData = res.data;
+      updateError = null;
+    } else if (res.error) {
+      updateError = res.error;
+    }
+  }
 
   if (updateError) {
+    console.error("Gagal update produk:", updateError);
     return { error: `Gagal memperbarui produk: ${updateError.message}` };
   }
+
+  console.log("cek setelah simpan (update):", updatedData);
 
   revalidatePath("/");
   revalidatePath("/admin");
